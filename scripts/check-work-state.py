@@ -41,6 +41,7 @@ def main() -> int:
 
     errors: list[str] = []
     work_dir_value = extract_field(current_text, "Work directory")
+    spec_value = extract_field(current_text, "Specification")
     plan_value = extract_field(current_text, "Plan")
 
     if not work_dir_value:
@@ -54,6 +55,23 @@ def main() -> int:
             errors.append("Work directory must be below docs/ai/work/.")
         if not work_dir.is_dir():
             errors.append(f"Declared work directory does not exist: {work_dir_value}")
+
+
+    if spec_value and spec_value.lower() != "not-required":
+        spec = ROOT / spec_value
+        if not spec.is_file():
+            errors.append(f"Declared specification does not exist: {spec_value}")
+        else:
+            spec_text = spec.read_text(encoding="utf-8")
+            spec_status = extract_field(spec_text, "Status")
+            ready = extract_field(spec_text, "Ready for implementation")
+            current_status = extract_field(current_text, "Status")
+            implementation_phases = {"planning", "implementation", "verification", "review", "remediation", "closeout"}
+            if current_status in implementation_phases:
+                if spec_status != "ready-for-implementation":
+                    errors.append(f"Specification must be ready-for-implementation during {current_status}; found '{spec_status}'")
+                if ready != "yes":
+                    errors.append(f"Specification must declare 'Ready for implementation: yes' during {current_status}")
 
     if not plan_value:
         errors.append("CURRENT_PLAN.md must contain a 'Plan' field.")

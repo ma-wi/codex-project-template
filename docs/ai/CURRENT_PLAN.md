@@ -9,8 +9,9 @@ When non-trivial work begins, replace this file with a compact pointer:
 
 - Requirement: `docs/requirements/<requirement-id>.md`
 - Work directory: `docs/ai/work/<requirement-id>/`
+- Specification: `docs/ai/work/<requirement-id>/SPEC.md` | not-required
 - Plan: `docs/ai/work/<requirement-id>/PLAN.md`
-- Status: planning | implementation | verification | review | remediation | closeout
+- Status: discovery | specification | planning | implementation | verification | review | remediation | closeout
 - Current task: none | T001
 - Last updated: YYYY-MM-DD
 ```

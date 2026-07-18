@@ -2,11 +2,28 @@
 
 - Status: draft | accepted | in-progress | blocked | completed
 - Requirement:
+- Accepted specification:
+- Specification status: ready-for-implementation | not-required
 - Work directory:
 - Owner/agent:
 - Last updated:
 
+## Discovery basis
+
+- Discovery artifact, if used:
+- Shared understanding confirmed by:
+- Confirmation date:
+- Remaining accepted assumptions:
+
 ## Problem and desired outcome
+
+## Optional user stories or journey scenarios
+
+Use only when they clarify user-visible behavior. Keep each story tied to acceptance criteria. Omit this section for purely technical work.
+
+| ID | Actor | Goal or scenario | Value/outcome | Acceptance criteria |
+|---|---|---|---|---|
+| US-1 | | | | AC-1 |
 
 ## Scope
 
@@ -37,6 +54,13 @@
 - Narrow topics or questions:
 - Retrieved source identifiers:
 - Adopted guidance and project-specific adaptation:
+
+## Test seams inherited from the specification
+
+- Primary seam:
+- Secondary seams:
+- Seams deliberately avoided:
+- Any justified deviation from the specification:
 
 ## Proposed approach
 
@@ -74,6 +98,8 @@ Create separate files under `tasks/` only for independently implementable or ver
 | AC-1 | T001 | Test or command |
 
 ## Test strategy
+
+Tests should exercise the agreed stable seams and avoid coupling to private implementation details.
 
 - Unit:
 - Integration:

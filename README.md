@@ -80,13 +80,24 @@ docs/ai/templates/REQUIREMENTS.md
 A recommended first instruction is:
 
 ```text
-Read AGENTS.md and the requirement. Inspect the repository before proposing a solution.
-Create docs/ai/CURRENT_PLAN.md from the implementation-plan template.
-Consult the `engineering-knowledge` MCP only for decisions identified in the plan.
-Do not implement until the plan contains scope, non-goals, assumptions,
-acceptance criteria, risks, affected areas, and verification steps.
-Then implement, test, run ./scripts/verify.sh, and create an independent review report.
+Read AGENTS.md, config/ai-project.yaml, and the requirement. Inspect the repository before proposing a solution.
+Select interview or synthesis mode according to the planning configuration.
+For significant work, create a stable SPEC.md from FEATURE_SPEC.md, then derive PLAN.md and task files.
+Consult the `engineering-knowledge` MCP only for concrete decisions identified during planning.
+Do not implement until the specification is ready-for-implementation, acceptance criteria and test seams are defined, and the plan contains risks, affected areas, and verification steps.
+Then implement task by task, test, run ./scripts/verify.sh, and create an independent review report.
 ```
+
+
+### Interview and conversation-to-spec modes
+
+Set `planning.mode` to `auto`, `interview`, or `synthesize`. In `auto`, the planner interviews only when material decisions are missing. In `synthesize`, it converts an already complete requirement or conversation into `SPEC.md` without repeating answered questions or inventing missing decisions.
+
+When the initial requirement or a feature is still broad, instruct the planner to enter discovery mode and create `DISCOVERY.md` from `docs/ai/templates/FEATURE_DISCOVERY.md`. The planner asks decision-dependent questions in small groups, provides a recommended answer for each material question, maintains a concise shared-understanding summary, and does not implement until the user explicitly confirms it. The behavior is configurable under `planning.discovery_interview` in `config/ai-project.yaml`.
+
+User stories are optional. Use them for user-visible workflows when actor, goal, and outcome add clarity. Do not create them mechanically for refactoring, infrastructure, migrations, security controls, or build work; requirements, constraints, acceptance criteria, and technical work items are clearer there.
+
+For significant features, keep `SPEC.md` separate from `PLAN.md`: the specification records what and why, observable behavior, acceptance criteria, and stable test seams; the plan records how, sequencing, affected modules, migrations, and exact verification; task files contain temporary implementation units.
 
 ### 5. Run the agent workflow
 
@@ -94,8 +105,10 @@ The standard lifecycle is:
 
 ```text
 Requirement
+  -> interview or synthesis
+  -> ready feature specification with test seams
   -> repository inspection
-  -> temporary work directory, plan, and task decomposition
+  -> temporary implementation plan and task decomposition
   -> targeted standards lookup when needed
   -> task-by-task implementation and tests
   -> focused checks
@@ -141,6 +154,7 @@ A role file supplements rather than replaces `AGENTS.md`.
 │       ├── DOCUMENTATION_RULES.md     Context-minimizing documentation rules
 │       ├── DEFINITION_OF_DONE.md      Completion criteria
 │       ├── CURRENT_PLAN.md            Compact pointer to active work
+│       ├── templates/FEATURE_SPEC.md  Stable feature specification
 │       ├── work/                      Temporary per-requirement plans, tasks, and reviews
 │       ├── NEXT_STEPS.md              Short prioritized follow-up list
 │       ├── DECISIONS.md               Small operational decisions

@@ -20,3 +20,6 @@ Write `docs/ai/work/<requirement-id>/REVIEW.md` from the review template. On app
 Use the standards MCP only when `AGENTS.md` permits it. Do not turn general preferences into blocking findings.
 
 Return `APPROVE`, `APPROVE_WITH_NOTES`, `REQUEST_CHANGES`, or `BLOCK` with prioritized, located, evidence-based findings.
+
+
+Verify that tests use the specification's agreed stable test seams and do not overfit private helpers, ORM details, or internal UI state without justification. Check that established project and domain terminology is used consistently.

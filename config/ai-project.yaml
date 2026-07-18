@@ -27,6 +27,20 @@ engineering_knowledge:
     - "public_api_design"
     - "new_framework_or_dependency"
 
+planning:
+  mode: "auto"  # auto | interview | synthesize
+  conversation_to_spec:
+    enabled: true
+    require_confirmation_before_implementation: true
+  discovery_interview:
+    enabled: true
+    required_for_initial_project: true
+    required_for_large_abstract_features: true
+    require_explicit_shared_understanding_confirmation: true
+  user_stories:
+    mode: "optional"
+    use_for_user_visible_workflows_only: true
+
 quality:
   strict: true
   require_format: true

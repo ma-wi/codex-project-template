@@ -49,6 +49,41 @@ A trivial change is mechanical, low-risk, and does not alter behavior, interface
 
 Do not start implementation until the task has testable acceptance criteria.
 
+### Planning mode selection
+
+Read `planning.mode` from `config/ai-project.yaml`.
+
+- `interview`: use structured discovery before specification.
+- `synthesize`: derive a specification from already supplied, confirmed conversation and repository context without repeating answered questions.
+- `auto`: use interview mode when material decisions are unclear; otherwise use synthesis mode.
+
+In synthesis mode, do not invent missing decisions or repeat questions already answered. Mark material gaps explicitly and stop before implementation when they affect scope, behavior, architecture, risk, test seams, or acceptance criteria.
+
+For significant features, produce a stable `SPEC.md` from `docs/ai/templates/FEATURE_SPEC.md` before the temporary implementation plan. The separation is:
+
+- `SPEC.md`: what, why, observable behavior, durable decisions, acceptance criteria, and test seams;
+- `PLAN.md`: how, sequencing, affected areas, migration, verification commands, and closeout;
+- `tasks/*.md`: concrete temporary implementation units and status.
+
+The implementation agent may start only when the specification has `Status: ready-for-implementation` and `Ready for implementation: yes`, unless the work is small enough not to require a separate specification.
+
+### Discovery interview for large or abstract features
+
+For an initial project, a new subsystem, or a feature whose behavior and boundaries are still abstract, enter discovery mode before producing an accepted implementation plan.
+
+In discovery mode:
+
+- interview the user systematically until both sides share a concrete understanding of the problem, users, workflows, boundaries, constraints, risks, and acceptance criteria;
+- walk one decision branch at a time and resolve prerequisite decisions before dependent decisions;
+- for every material question, provide a recommended answer with a concise rationale and relevant trade-offs;
+- distinguish decisions that require user confirmation from technical details that can safely be delegated;
+- maintain a compact decision log, unresolved-question list, and provisional scope in the active work directory;
+- summarize confirmed decisions periodically instead of repeating the entire conversation;
+- do not implement, scaffold production code, or mark the plan accepted until the user explicitly confirms shared understanding;
+- stop asking when further questions would not materially affect scope, behavior, architecture, risk, or acceptance. Do not create artificial questions merely to prolong discovery.
+
+Use `docs/ai/templates/FEATURE_DISCOVERY.md` for this phase. After confirmation, transfer the stable result into `SPEC.md`, then derive `PLAN.md` and task files. Before writing the specification, inspect applicable ADRs and existing domain terminology and reuse established names.
+
 The plan must include:
 
 - problem and desired outcome;
@@ -59,7 +94,8 @@ The plan must include:
 - task breakdown;
 - required documentation changes;
 - exact verification commands or verification categories;
-- rollback or recovery considerations for risky changes.
+- rollback or recovery considerations for risky changes;
+- explicit primary and secondary test seams, including implementation-specific seams deliberately avoided.
 
 Do not turn optional refactoring into part of the task. Record unrelated improvements in `NEXT_STEPS.md`.
 
@@ -119,6 +155,8 @@ For every non-trivial requirement, create a temporary directory:
 
 It may contain:
 
+- `DISCOVERY.md`;
+- `SPEC.md`;
 - `PLAN.md`;
 - `tasks/T001-<slug>.md` and additional task files;
 - `REVIEW.md`;

@@ -10,6 +10,12 @@ Describe the externally observable result.
 
 ## Users and stakeholders
 
+## Optional user stories or journey scenarios
+
+Use this section only for user-visible workflows where an actor, goal, and outcome improve understanding. User stories do not replace functional requirements or acceptance criteria.
+
+- US-1: As a <user>, I want <capability>, so that <outcome>.
+
 ## Functional requirements
 
 - FR-1:

@@ -29,6 +29,12 @@ Describe one independently implementable and verifiable outcome.
 
 Include only task-specific constraints. Do not duplicate repository-wide rules.
 
+## Applicable specification and test seam
+
+- Specification criteria:
+- Primary observable boundary for this task:
+- Implementation-specific boundaries to avoid testing directly:
+
 ## Verification
 
 - [ ] Focused tests
