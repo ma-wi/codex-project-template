@@ -1,7 +1,9 @@
 # Local agent and verification configuration
 scripts/project.env
 
-# Common IDE-private files
+# IntelliJ IDEA: keep personal/local state out of Git.
+.idea/*
+!.idea/vcs.xml
 .idea/workspace.xml
 .idea/shelf/
 
@@ -12,11 +14,16 @@ scripts/project.env
 .venv/
 venv/
 
-# Build and test output
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build, test, and dependency output
 build/
 dist/
 target/
 coverage/
-.pytest_cache/
-__pycache__/
 node_modules/
