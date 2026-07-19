@@ -27,6 +27,10 @@ IGNORED_PARTS = {
 }
 
 
+def rel(path: Path) -> str:
+    return path.relative_to(ROOT).as_posix()
+
+
 def env_bool(name: str, default: bool) -> bool:
     value = os.getenv(name, "1" if default else "0")
     if value not in {"0", "1"}:
@@ -82,7 +86,7 @@ def add_poetry_dependency(
         return
     if not isinstance(value, dict):
         errors.append(
-            f"unsupported dependency syntax in {source.relative_to(ROOT)}: {name!r}={value!r}"
+            f"unsupported dependency syntax in {rel(source)}: {name!r}={value!r}"
         )
         return
     source_keys = {"git", "path", "url", "source", "branch", "tag", "rev"}
@@ -90,21 +94,21 @@ def add_poetry_dependency(
     if present_source_keys:
         errors.append(
             f"remote or mutable source: pypi:{name} uses {', '.join(present_source_keys)} "
-            f"({source.relative_to(ROOT)})"
+            f"({rel(source)})"
         )
         return
     allowed_keys = {"version", "markers", "python", "extras", "optional"}
     unknown = sorted(set(value) - allowed_keys)
     if unknown:
         errors.append(
-            f"unsupported dependency syntax in {source.relative_to(ROOT)}: "
+            f"unsupported dependency syntax in {rel(source)}: "
             f"pypi:{name} uses {', '.join(unknown)}"
         )
         return
     version = value.get("version")
     if not isinstance(version, str):
         errors.append(
-            f"unsupported dependency syntax in {source.relative_to(ROOT)}: "
+            f"unsupported dependency syntax in {rel(source)}: "
             f"pypi:{name} requires a string version"
         )
         return
@@ -119,7 +123,7 @@ def add_cargo_dependencies(
 ) -> None:
     if not isinstance(values, dict):
         errors.append(
-            f"unsupported dependency section in {source.relative_to(ROOT)}: expected a table"
+            f"unsupported dependency section in {rel(source)}: expected a table"
         )
         return
     for name, value in values.items():
@@ -128,7 +132,7 @@ def add_cargo_dependencies(
             continue
         if not isinstance(value, dict):
             errors.append(
-                f"unsupported dependency syntax in {source.relative_to(ROOT)}: {name!r}={value!r}"
+                f"unsupported dependency syntax in {rel(source)}: {name!r}={value!r}"
             )
             continue
         source_keys = {"git", "path", "branch", "tag", "rev", "registry"}
@@ -136,7 +140,7 @@ def add_cargo_dependencies(
         if present_source_keys:
             errors.append(
                 f"remote or mutable source: cargo:{name} uses {', '.join(present_source_keys)} "
-                f"({source.relative_to(ROOT)})"
+                f"({rel(source)})"
             )
             continue
         allowed_keys = {
@@ -149,14 +153,14 @@ def add_cargo_dependencies(
         unknown = sorted(set(value) - allowed_keys)
         if unknown:
             errors.append(
-                f"unsupported dependency syntax in {source.relative_to(ROOT)}: "
+                f"unsupported dependency syntax in {rel(source)}: "
                 f"cargo:{name} uses {', '.join(unknown)}"
             )
             continue
         version = value.get("version")
         if not isinstance(version, str):
             errors.append(
-                f"unsupported dependency syntax in {source.relative_to(ROOT)}: "
+                f"unsupported dependency syntax in {rel(source)}: "
                 f"cargo:{name} requires a string version"
             )
             continue
@@ -174,7 +178,7 @@ def parse_xml(path: Path, errors: list[str]) -> ElementTree.Element | None:
         # Input is bounded and DTD/entity declarations were rejected above.
         return ElementTree.fromstring(content)  # nosec B314
     except (ElementTree.ParseError, OSError, ValueError) as exc:
-        errors.append(f"cannot parse {path.relative_to(ROOT)}: {exc}")
+        errors.append(f"cannot parse {rel(path)}: {exc}")
         return None
 
 
@@ -198,7 +202,7 @@ def read_dependencies(errors: list[str]) -> list[tuple[str, str | None, Path]]:
         try:
             data = json.loads(package_json.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError) as exc:
-            errors.append(f"cannot parse {package_json.relative_to(ROOT)}: {exc}")
+            errors.append(f"cannot parse {rel(package_json)}: {exc}")
             continue
         for section in (
             "dependencies",
@@ -209,7 +213,7 @@ def read_dependencies(errors: list[str]) -> list[tuple[str, str | None, Path]]:
             for name, version in (data.get(section) or {}).items():
                 if not isinstance(version, str):
                     errors.append(
-                        f"unsupported dependency syntax in {package_json.relative_to(ROOT)}: {name!r} must have a string version"
+                        f"unsupported dependency syntax in {rel(package_json)}: {name!r} must have a string version"
                     )
                     continue
                 add(found, "npm", name, version, package_json)
@@ -229,14 +233,14 @@ def read_dependencies(errors: list[str]) -> list[tuple[str, str | None, Path]]:
                 add(found, "pypi", match.group(1), match.group(2), requirements)
             else:
                 errors.append(
-                    f"unsupported dependency syntax in {requirements.relative_to(ROOT)}:{number}: {line!r}"
+                    f"unsupported dependency syntax in {rel(requirements)}:{number}: {line!r}"
                 )
 
     for pyproject in manifests("pyproject.toml"):
         try:
             data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
         except (tomllib.TOMLDecodeError, OSError) as exc:
-            errors.append(f"cannot parse {pyproject.relative_to(ROOT)}: {exc}")
+            errors.append(f"cannot parse {rel(pyproject)}: {exc}")
             continue
         groups: list[object] = list(
             (data.get("project", {}).get("dependencies", []) or [])
@@ -250,7 +254,7 @@ def read_dependencies(errors: list[str]) -> list[tuple[str, str | None, Path]]:
         for specification in groups:
             if not isinstance(specification, str):
                 errors.append(
-                    f"unsupported dependency syntax in {pyproject.relative_to(ROOT)}: {specification!r}"
+                    f"unsupported dependency syntax in {rel(pyproject)}: {specification!r}"
                 )
                 continue
             match = re.fullmatch(
@@ -261,7 +265,7 @@ def read_dependencies(errors: list[str]) -> list[tuple[str, str | None, Path]]:
                 add(found, "pypi", match.group(1), match.group(2), pyproject)
             else:
                 errors.append(
-                    f"unsupported dependency syntax in {pyproject.relative_to(ROOT)}: {specification!r}"
+                    f"unsupported dependency syntax in {rel(pyproject)}: {specification!r}"
                 )
         poetry = data.get("tool", {}).get("poetry", {}) or {}
         poetry_sections: list[object] = [
@@ -273,12 +277,12 @@ def read_dependencies(errors: list[str]) -> list[tuple[str, str | None, Path]]:
                 poetry_sections.append(group.get("dependencies", {}) or {})
             else:
                 errors.append(
-                    f"unsupported Poetry group syntax in {pyproject.relative_to(ROOT)}: {group!r}"
+                    f"unsupported Poetry group syntax in {rel(pyproject)}: {group!r}"
                 )
         for poetry_section in poetry_sections:
             if not isinstance(poetry_section, dict):
                 errors.append(
-                    f"unsupported Poetry dependency section in {pyproject.relative_to(ROOT)}"
+                    f"unsupported Poetry dependency section in {rel(pyproject)}"
                 )
                 continue
             for name, value in poetry_section.items():
@@ -324,7 +328,7 @@ def read_dependencies(errors: list[str]) -> list[tuple[str, str | None, Path]]:
         try:
             data = tomllib.loads(cargo.read_text(encoding="utf-8"))
         except (tomllib.TOMLDecodeError, OSError) as exc:
-            errors.append(f"cannot parse {cargo.relative_to(ROOT)}: {exc}")
+            errors.append(f"cannot parse {rel(cargo)}: {exc}")
             continue
         cargo_section_names = (
             "dependencies",
@@ -343,7 +347,7 @@ def read_dependencies(errors: list[str]) -> list[tuple[str, str | None, Path]]:
             for target in targets.values():
                 if not isinstance(target, dict):
                     errors.append(
-                        f"unsupported Cargo target syntax in {cargo.relative_to(ROOT)}: {target!r}"
+                        f"unsupported Cargo target syntax in {rel(cargo)}: {target!r}"
                     )
                     continue
                 for section in cargo_section_names:
@@ -399,7 +403,7 @@ def check_lockfiles(errors: list[str]) -> None:
                 (manifest.parent / candidate).exists() for candidate in candidates
             ):
                 errors.append(
-                    f"{label}: lock/integrity file missing next to {manifest.relative_to(ROOT)} "
+                    f"{label}: lock/integrity file missing next to {rel(manifest)} "
                     f"({', '.join(candidates)})"
                 )
     for project in [
@@ -411,9 +415,7 @@ def check_lockfiles(errors: list[str]) -> None:
             (project.parent / "packages.lock.json").exists()
             or (ROOT / "packages.lock.json").exists()
         ):
-            errors.append(
-                f".NET: packages.lock.json missing for {project.relative_to(ROOT)}"
-            )
+            errors.append(f".NET: packages.lock.json missing for {rel(project)}")
 
 
 def floating(version: str | None) -> bool:
@@ -473,7 +475,7 @@ def main() -> int:
     allow = entries(CONFIG / "dependency-allowlist.txt")
     dependencies = read_dependencies(errors)
     for coordinate, version, source in dependencies:
-        location = source.relative_to(ROOT)
+        location = rel(source)
         if coordinate in deny:
             errors.append(f"denied dependency: {coordinate} ({location})")
         if allow_mode and coordinate not in allow:
@@ -491,9 +493,7 @@ def main() -> int:
 
     print(f"Dependency policy inspected {len(dependencies)} direct dependency entries.")
     for coordinate, version, source in dependencies:
-        print(
-            f"  {coordinate}{' ' + version if version else ''} [{source.relative_to(ROOT)}]"
-        )
+        print(f"  {coordinate}{' ' + version if version else ''} [{rel(source)}]")
     if errors:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)

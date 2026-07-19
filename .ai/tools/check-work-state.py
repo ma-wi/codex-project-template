@@ -40,6 +40,10 @@ VALID_PHASES = {
 }
 
 
+def rel(path: Path) -> str:
+    return path.relative_to(ROOT).as_posix()
+
+
 def resolve_below(
     value: str, boundary: Path, label: str, errors: list[str]
 ) -> Path | None:
@@ -47,7 +51,7 @@ def resolve_below(
     try:
         candidate.relative_to(boundary)
     except ValueError:
-        errors.append(f"{label} must be below {boundary.relative_to(ROOT)}/.")
+        errors.append(f"{label} must be below {rel(boundary)}/.")
         return None
     return candidate
 
@@ -135,10 +139,10 @@ def main() -> int:
         text = task_file.read_text(encoding="utf-8")
         status = extract_field(text, "Status")
         if status is None:
-            errors.append(f"{task_file.relative_to(ROOT)}: missing Status field")
+            errors.append(f"{rel(task_file)}: missing Status field")
         elif status not in VALID_STATUSES:
             errors.append(
-                f"{task_file.relative_to(ROOT)}: invalid status '{status}'; "
+                f"{rel(task_file)}: invalid status '{status}'; "
                 f"expected one of {', '.join(sorted(VALID_STATUSES))}"
             )
 

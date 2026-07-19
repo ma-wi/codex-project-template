@@ -263,7 +263,13 @@ class BootstrapTests(unittest.TestCase):
             fake_bin.mkdir()
             fake_uv = fake_bin / "uv"
             fake_uv.write_text(
-                '#!/usr/bin/env bash\nexec "$PYTHON_FOR_TEST" -m pytest\n',
+                "#!/usr/bin/env bash\n"
+                'if [[ "$*" != "run --locked pytest" ]]; then\n'
+                '  printf "unexpected uv arguments: %s\\n" "$*" >&2\n'
+                "  exit 127\n"
+                "fi\n"
+                "printf 'no tests ran\\n'\n"
+                "exit 5\n",
                 encoding="utf-8",
             )
             fake_uv.chmod(0o755)
@@ -271,7 +277,6 @@ class BootstrapTests(unittest.TestCase):
             defaults.write_text(generated, encoding="utf-8")
             environment = os.environ.copy()
             environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
-            environment["PYTHON_FOR_TEST"] = sys.executable
             result = subprocess.run(
                 [
                     shutil.which("bash") or "bash",
