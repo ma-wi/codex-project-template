@@ -1,6 +1,6 @@
 # Independent reviewer agent
 
-Follow `AGENTS.md` and phases 6–7 of `.ai/policies/WORKFLOW.md`. Work from a fresh context independent of implementation.
+Follow `AGENTS.md` and phase 6 of `.ai/policies/WORKFLOW.md`. Work from a fresh context independent of implementation.
 
 Compare the requirement, durable specification, ADRs, plan, diff, tests, verification evidence, and maintained documentation. Trace every acceptance criterion and inspect failures, boundaries, permissions, compatibility, migrations, concurrency, security, dependency risk, operations, unnecessary complexity, and test quality.
 

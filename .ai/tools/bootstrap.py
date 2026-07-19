@@ -40,7 +40,7 @@ CONFIG_SCHEMA = {
         "python": {"enabled": None},
         "react": {"enabled": None, "directory": None, "package_manager": None},
         "bash": {"enabled": None},
-        "dotnet": {"enabled": None, "solution": None},
+        "dotnet": {"enabled": None, "solution": None, "test_project": None},
     },
     "engineering_knowledge": {"enabled": None},
     "documentation": {
@@ -136,6 +136,11 @@ def validate_config(data: dict) -> None:
             get(data, "stacks", "dotnet", "solution", default=""),
             True,
         ),
+        (
+            "stacks.dotnet.test_project",
+            get(data, "stacks", "dotnet", "test_project", default=""),
+            not get(data, "stacks", "dotnet", "enabled", default=False),
+        ),
     ):
         validate_repository_path(str(value), label, allow_empty=allow_dot)
 
@@ -210,29 +215,35 @@ def generate_env(data: dict) -> str:
         fmt_apply += [prefix + runner + " format"]
         lint += [prefix + runner + " lint", prefix + runner + " typecheck"]
         tests += [prefix + runner + " test"]
-        audit_command = prefix + manager + " audit --audit-level=high"
-        security += [audit_command]
-        dependency_scans += [audit_command]
+        dependency_scans += [prefix + manager + " audit --audit-level=high"]
         build += [prefix + runner + " build"]
 
     if get(data, "stacks", "bash", "enabled", default=False):
         lint += [
             "find . -type f -name '*.sh' -not -path './.git/*' -not -path './.ai/*' -print0 | xargs -0 -r shellcheck"
         ]
-        tests += ["if [ -d tests/shell ]; then bats tests/shell; fi"]
+        tests += ["test -d tests/shell && bats tests/shell"]
 
     if get(data, "stacks", "dotnet", "enabled", default=False):
         solution = str(get(data, "stacks", "dotnet", "solution", default="") or ".")
+        test_project = str(get(data, "stacks", "dotnet", "test_project"))
         target = shell_quote(solution)
+        test_target = shell_quote(test_project)
         setup += [f"dotnet restore {target} --locked-mode"]
         fmt_check += [f"dotnet format {target} --verify-no-changes"]
         fmt_apply += [f"dotnet format {target}"]
         lint += [f"dotnet build {target} --no-restore -warnaserror"]
-        tests += [f"dotnet test {target} --no-restore"]
+        tests += [
+            "result_dir=$(mktemp -d) && "
+            "trap 'rm -rf \"$result_dir\"' EXIT && "
+            f"dotnet test {test_target} --no-restore "
+            '--logger "trx;LogFileName=agent-template.trx" '
+            '--results-directory "$result_dir" && '
+            'grep -Eq \'total="[1-9][0-9]*"\' "$result_dir/agent-template.trx"'
+        ]
         vulnerable_packages = (
             f"dotnet list {target} package --vulnerable --include-transitive"
         )
-        security += [vulnerable_packages]
         dependency_scans += [vulnerable_packages]
         build += [f"dotnet build {target} --no-restore"]
         powershell_files = [
@@ -249,7 +260,8 @@ def generate_env(data: dict) -> str:
                 'pwsh -NoProfile -Command "Invoke-ScriptAnalyzer -Path . -Recurse -Severity Warning,Error"'
             ]
             tests += [
-                'pwsh -NoProfile -Command "if (Test-Path tests/powershell) { Invoke-Pester tests/powershell -CI }"'
+                "find tests/powershell -type f -name '*.Tests.ps1' -print -quit 2>/dev/null | grep -q . && "
+                'pwsh -NoProfile -Command "Invoke-Pester tests/powershell -CI"'
             ]
 
     commands = {
@@ -556,6 +568,28 @@ def update_context(data: dict) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def update_next_steps() -> None:
+    path = ROOT / ".ai/NEXT_STEPS.md"
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    if "Run bootstrap and commit the generated" not in text:
+        return
+    path.write_text(
+        "# Next steps\n\n"
+        "Keep at most 5-10 prioritized actionable items. Remove completed or obsolete entries.\n\n"
+        "## Prioritized\n\n"
+        "1. Complete `SECURITY.md` with the private reporting channel and supported-version policy.\n"
+        "2. Complete the purpose and project-specific fields in `.ai/PROJECT_CONTEXT.md`.\n"
+        "3. Record the required decisions in `.ai/policies/QUALITY_GATES.md` and configure branch protection.\n\n"
+        "## Blockers\n\n"
+        "- Full verification remains blocked until the required project-readiness fields are complete.\n\n"
+        "## Residual risks\n\n"
+        "- Stack-specific verification has not yet been exercised for this concrete project.\n",
+        encoding="utf-8",
+    )
+
+
 def create_project_readme(data: dict) -> None:
     path = ROOT / "README.md"
     if path.exists():
@@ -623,6 +657,7 @@ def main() -> None:
         generate_env(data), encoding="utf-8"
     )
     update_context(data)
+    update_next_steps()
     create_idea()
     for path in (ROOT / ".ai/tools").glob("*.sh"):
         path.chmod(path.stat().st_mode | 0o111)
@@ -630,6 +665,7 @@ def main() -> None:
     print("[bootstrap] Initialized configured Python and React project tooling")
     print("[bootstrap] Generated versioned .ai/config/project.defaults.env")
     print("[bootstrap] Updated .ai/PROJECT_CONTEXT.md")
+    print("[bootstrap] Updated project-readiness next steps")
     print("[bootstrap] Created .idea/vcs.xml")
     print("[bootstrap] AI rules are ready under .aiassistant/rules/")
     print("[bootstrap] One manual IntelliJ setting remains:")

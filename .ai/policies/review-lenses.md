@@ -1,19 +1,10 @@
-# Conditional review lenses
+# Conditional review routing
 
-Load only the sections relevant to the change.
+Load only guidance triggered by the change.
 
-## Security and privacy
-
-Inspect trust boundaries, authentication, authorization, secrets, personal data, logging, injection, path traversal, unsafe parsing/execution, cryptography, sessions, dependencies, resource exhaustion, insecure defaults, rollback, and operational exposure. Use a separate security reviewer for significant changes to these areas.
-
-## Verification
-
-Confirm tests would detect the intended defect and cover relevant negative, boundary, permission, migration, and recovery behavior. Reproduce failures and record exact commands and environment limitations.
-
-## Documentation
-
-Confirm README, contributor, architecture, ADR, API, operational, security, `.ai/PROJECT_CONTEXT.md`, `.ai/CURRENT_PLAN.md`, and `.ai/NEXT_STEPS.md` content matches current truth. Run `./.ai/tools/check-docs.py`; errors block completion and warnings require an explicit disposition.
-
-## Dependencies and supply chain
-
-Confirm necessity, alternatives, maintainer/provenance, release activity, license, install scripts, transitive risk, vulnerabilities, version/lock strategy, and replacement plan. Review manifest and lockfile diffs and run `./.ai/tools/check-dependencies.sh`.
+| Trigger | Read | Required evidence |
+|---|---|---|
+| Trust boundaries, identity, data, parsing, networks, secrets, or irreversible change | `SECURITY_GUIDELINES.md` | Threat paths, negative tests, safe failure/recovery; specialist review for significant risk |
+| Manifest, lockfile, registry, build-chain, or package change | `DEPENDENCY_POLICY.md` | Necessity/provenance/license review and `./.ai/tools/check-dependencies.sh` |
+| Behavior, interface, migration, permission, or recovery change | `QUALITY_GATES.md` | Stable-seam tests, focused checks, and full verification |
+| User, contributor, architecture, operational, or agent-context impact | `DOCUMENTATION_RULES.md` | Current-state documentation and `./.ai/tools/check-docs.py` |

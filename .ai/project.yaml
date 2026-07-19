@@ -13,6 +13,7 @@ stacks:
   dotnet:
     enabled: false
     solution: ""
+    test_project: ""
 
 engineering_knowledge:
   enabled: false

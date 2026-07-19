@@ -83,7 +83,10 @@ Block completion when:
 
 - a denied or unapproved dependency is introduced;
 - a required lockfile is absent;
-- a critical/high vulnerability lacks an accepted, time-bounded exception;
+- a critical/high vulnerability classified as P0/P1 remains unresolved; these findings cannot be waived;
 - a forbidden, restricted, incompatible, or unknown license is unresolved;
 - an install script, maintainer change, or package provenance concern is unexplained;
 - the dependency is unnecessary or duplicates existing functionality.
+
+Only lower-priority findings may receive a time-bounded exception with an authorized
+owner, rationale, expiry, and follow-up.

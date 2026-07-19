@@ -9,7 +9,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CURRENT = ROOT / ".ai" / "CURRENT_PLAN.md"
-WORK_ROOT = ROOT / ".ai" / "work"
+WORK_ROOT = (ROOT / ".ai" / "work").resolve()
+SPEC_ROOT = (ROOT / "docs" / "specifications").resolve()
 VALID_STATUSES = {
     "draft",
     "ready",
@@ -41,6 +42,18 @@ def extract_field(text: str, field: str) -> str | None:
     return match.group(1).strip().strip("`")
 
 
+def resolve_below(
+    value: str, boundary: Path, label: str, errors: list[str]
+) -> Path | None:
+    candidate = (ROOT / value.rstrip("/")).resolve()
+    try:
+        candidate.relative_to(boundary)
+    except ValueError:
+        errors.append(f"{label} must be below {boundary.relative_to(ROOT)}/.")
+        return None
+    return candidate
+
+
 def main() -> int:
     if not CURRENT.exists():
         print("FAIL: .ai/CURRENT_PLAN.md is missing.")
@@ -63,23 +76,15 @@ def main() -> int:
         errors.append("CURRENT_PLAN.md must contain a 'Work directory' field.")
         work_dir = None
     else:
-        work_dir = ROOT / work_dir_value.rstrip("/")
-        try:
-            work_dir.relative_to(WORK_ROOT)
-        except ValueError:
-            errors.append("Work directory must be below .ai/work/.")
-        if not work_dir.is_dir():
+        work_dir = resolve_below(work_dir_value, WORK_ROOT, "Work directory", errors)
+        if work_dir is not None and not work_dir.is_dir():
             errors.append(f"Declared work directory does not exist: {work_dir_value}")
 
     if spec_value and spec_value.lower() != "not-required":
-        spec = ROOT / spec_value
-        try:
-            spec.relative_to(ROOT / "docs" / "specifications")
-        except ValueError:
-            errors.append("Durable specifications must be below docs/specifications/.")
-        if not spec.is_file():
+        spec = resolve_below(spec_value, SPEC_ROOT, "Durable specification", errors)
+        if spec is not None and not spec.is_file():
             errors.append(f"Declared specification does not exist: {spec_value}")
-        else:
+        elif spec is not None:
             spec_text = spec.read_text(encoding="utf-8")
             spec_status = extract_field(spec_text, "Status")
             ready = extract_field(spec_text, "Ready for implementation")
@@ -104,10 +109,11 @@ def main() -> int:
     if not plan_value:
         errors.append("CURRENT_PLAN.md must contain a 'Plan' field.")
     else:
-        plan = ROOT / plan_value
-        if not plan.is_file():
+        plan_boundary = work_dir if work_dir is not None else ROOT.resolve()
+        plan = resolve_below(plan_value, plan_boundary, "Declared plan", errors)
+        if plan is not None and not plan.is_file():
             errors.append(f"Declared plan does not exist: {plan_value}")
-        else:
+        elif plan is not None:
             if (
                 work_dir
                 and work_dir.is_dir()

@@ -73,3 +73,6 @@ Require a security-focused review for changes involving:
 - network exposure or new external services;
 - dependency or build-pipeline changes;
 - migrations that can expose, corrupt, or irreversibly transform data.
+
+P0 and P1 security findings cannot be accepted or waived. Lower-priority risk
+acceptance must name an authorized owner, rationale, expiry, and follow-up.

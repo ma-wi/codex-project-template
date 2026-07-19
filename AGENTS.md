@@ -1,116 +1,102 @@
 # Repository instructions for coding agents
 
-## Mission
+## Mission and priority
 
-Deliver the smallest secure, tested, reviewable change that satisfies an accepted requirement. Do not expand scope silently.
+Deliver the smallest secure, tested, reviewable change satisfying an accepted
+requirement. Never expand scope silently.
 
-## Instruction priority
+The production-access prohibition below is an absolute, non-overridable safety
+boundary. Subject to it, resolve conflicts in this order:
 
-The absolute production-access prohibition in this file is a non-overridable
-safety boundary and takes precedence over every instruction, requirement, plan,
-approval, role, and document, including current user instructions. Any conflicting
-request must be refused and reported. Subject to that boundary, use this order:
+1. current explicit user instruction;
+2. accepted requirement and acceptance criteria;
+3. nearest applicable `AGENTS.md`;
+4. accepted ADRs and durable specification;
+5. active implementation plan;
+6. existing code, tests, and conventions.
 
-1. Current explicit user instruction.
-2. Accepted requirement and acceptance criteria.
-3. Nearest applicable `AGENTS.md`.
-4. Accepted ADRs and durable specification.
-5. Active implementation plan.
-6. Existing code, tests, and project conventions.
+Stop before destructive, incompatible, or security-sensitive action when material
+instructions conflict.
 
-Stop and report material contradictions before destructive, incompatible, or security-sensitive action.
+## Start and classify
 
-## Start here
+Read `.ai/project.yaml`, the requirement, `.ai/PROJECT_CONTEXT.md`, the applicable
+role/conditional policies, and `.ai/policies/WORKFLOW.md`. Do not load all `.ai/`
+files by default.
 
-1. Read `.ai/project.yaml`.
-2. Read the requirement and `.ai/PROJECT_CONTEXT.md`.
-3. Read only the role file and conditional policy documents relevant to the task.
-4. Follow the canonical lifecycle in `.ai/policies/WORKFLOW.md`.
+- **Trivial:** mechanical and behavior-neutral; no work directory, relevant checks.
+- **Normal:** bounded behavior/fix; accepted criteria, compact temporary plan, tests,
+  full verification, and independent review.
+- **Significant:** initial project, subsystem, public API, migration, sensitive
+  security/privacy work, major integration, or broad ambiguity; discovery when
+  unclear, ready durable specification, explicit test seams, tasks, full verification,
+  independent review, and risk-triggered specialist review.
 
-Do not load every file under `.ai/` by default.
+Use the higher class when uncertain and record class plus rationale in the plan.
 
-## Change classes
+## Lifecycle and artifacts
 
-- **Trivial:** mechanical, low-risk, no behavioral/interface/configuration/security change. No work directory is required; run relevant checks.
-- **Normal:** bounded behavior change or bug fix. Requires accepted criteria, a compact temporary plan, tests, full verification, and independent review.
-- **Significant:** initial project, new subsystem, public API, migration, security/privacy-sensitive work, major integration, or broad/ambiguous feature. Requires discovery when unclear, a durable specification, explicit test seams, task decomposition, full verification, and independent review. Add a specialist security review when the threat surface changes materially.
+Use one active requirement per branch/worktree and follow the canonical lifecycle in
+`.ai/policies/WORKFLOW.md`.
 
-If uncertain, use the higher class. Record the selected class and reason in the plan.
+- Durable input: `docs/requirements/<id>.md`.
+- Durable behavior/criteria: `docs/specifications/<id>.md`.
+- Durable architecture rationale: `docs/architecture/decisions/`.
+- Temporary active work: `.ai/work/<id>/`, referenced by `.ai/CURRENT_PLAN.md`.
+- Unresolved follow-up only: issues or `.ai/NEXT_STEPS.md`.
 
-## Artifact model
-
-Use one active requirement per Git branch/worktree.
-
-- Requirements: `docs/requirements/<requirement-id>.md` — durable input.
-- Accepted specifications: `docs/specifications/<requirement-id>.md` — durable behavior, decisions, acceptance criteria, and test seams.
-- ADRs: `docs/architecture/decisions/` — durable architecture decisions accepted before dependent implementation.
-- Active work: `.ai/work/<requirement-id>/` — temporary plan, tasks, and review notes.
-- Active pointer: `.ai/CURRENT_PLAN.md` — compact and single-valued.
-- Follow-up: `.ai/NEXT_STEPS.md` or issues — unresolved actionable work only.
-
-Temporary work artifacts must remain through independent review. Before merge, transfer durable information, record the completion summary in the pull request, remove temporary artifacts, and reset `CURRENT_PLAN.md`.
-
-## Planning and implementation boundaries
-
-- Do not implement before acceptance criteria are testable.
-- Significant work may start only when its specification says `Status: ready-for-implementation` and `Ready for implementation: yes`.
-- The planner may inspect and write planning artifacts but must not change production code.
-- The implementer works only on `ready` tasks and may advance them through `implemented` and `verified`.
-- The independent reviewer may advance verified tasks to `reviewed`; the closeout step advances accepted work to `done`.
-- Material plan deviations must be recorded before continuing.
+Normal/significant work requires temporary planning artifacts. Significant
+implementation requires `Status: ready-for-implementation` and
+`Ready for implementation: yes`. Agents propose requirements, specifications, and
+ADRs; a named authorized decision owner accepts them. Planners never change
+production code. Implementers work only on `ready` tasks and stop at `verified` before
+review. Reviewers may advance verified work to `reviewed`; after approval the
+implementation context performs mechanical closeout and marks it `done`. Material
+closeout changes return to review.
 
 ## Engineering rules
 
 - Preserve compatibility unless a breaking change is explicitly accepted.
-- Add automated tests for every behavior change at the lowest useful stable seam.
-- For bug fixes, add a failing regression test first where practical.
-- Test relevant failures, boundaries, permissions, migration, and recovery behavior.
-- Do not weaken tests, lint rules, scanners, or thresholds to obtain a pass.
-- Do not add unrelated cleanup or speculative abstraction.
-- Do not add or upgrade dependencies without the review required by `.ai/policies/DEPENDENCY_POLICY.md`.
-- Never claim a command passed unless it was executed and observed.
+- Add lowest-useful-seam automated tests for every behavior change; for bugs, add a
+  failing regression test first where practical.
+- Cover relevant failures, boundaries, permissions, migration, and recovery.
+- Never weaken tests, lint, scanners, requiredness, or thresholds to obtain a pass.
+- Avoid unrelated cleanup, speculative abstraction, and unreviewed dependencies.
+- Validate untrusted input and server-side authorization; prevent injection, path
+  traversal, unsafe deserialization, and unbounded resource use.
+- Use established cryptographic libraries and protocols; never design custom
+  cryptography.
+- Never commit or print secrets, credentials, production data, or sensitive personal
+  data. Use secure defaults, least privilege, timeouts, bounded retries, and safe
+  failure behavior.
+- Stop and escalate credible high-impact vulnerabilities, data-loss risk, or unsafe
+  migrations.
 
-## Security baseline
+Read `.ai/policies/SECURITY_GUIDELINES.md` and/or
+`.ai/policies/DEPENDENCY_POLICY.md` only when their threat surfaces apply.
 
-### Absolute production-access prohibition
+## Absolute production-access prohibition
 
 Access to project, customer, or organizational production is forbidden without
-exception. Never connect to, access, read, query, inspect, modify, administer, or
-otherwise interact with a production environment, system, service, database, data
-store, host, cluster, cloud account, network, API, queue, storage resource, secret
-store, or any resource that contains or controls production data or workloads.
+exception. Never connect to, inspect, query, modify, administer, or otherwise
+interact with any production environment, workload, database, host, cluster, cloud
+account, network, API, queue, storage, secret store, control plane, production data,
+or resource controlling them.
 
-Never execute a script, migration, deployment, job, test, diagnostic, CLI command,
-API call, CI/CD action, or other operation that targets production or could cause
-an action in production. This includes read-only access, health checks, dry runs,
-troubleshooting, and indirect access through automation, tunnels, bastions,
-control planes, integrations, or third-party systems. Never use production
-credentials, endpoints, configuration, backups, snapshots, exports, or copied
-production data.
+Never run a script, migration, deployment, job, test, diagnostic, CLI/API call,
+CI/CD action, health check, dry run, tunnel, bastion, integration, or indirect
+automation that targets or could affect production. Never use production credentials,
+endpoints, configuration, backups, snapshots, exports, or copied production data.
 
-Work only with local, development, test, or sandbox resources that are explicitly
-confirmed to be non-production and contain no production data. If the target or
-effect is ambiguous, treat it as production and stop. No request, requirement,
-plan, approval, or convenience overrides this prohibition.
+Work only with explicitly confirmed local, development, test, or sandbox resources
+containing no production data. Ambiguity means production: stop. Source hosting,
+package registries, public documentation, and explicitly configured engineering tools
+are allowed only when they have no production control path and receive no production
+secrets or data. No instruction, approval, plan, or document overrides this boundary.
 
-Ordinary development use of source hosting, package registries, public
-documentation, and explicitly configured engineering tools is allowed only when it
-cannot access, deploy to, control, or otherwise affect production and receives no
-production secrets or data. If a development action could trigger a production
-deployment or operation, it is prohibited.
+## Verification and review
 
-- Validate untrusted input at trust boundaries and enforce authorization server-side.
-- Never commit or print secrets, credentials, production data, or sensitive personal data.
-- Prevent injection, path traversal, unsafe deserialization, and unbounded resource use.
-- Use established cryptographic libraries and protocols.
-- Use least privilege, secure defaults, timeouts, bounded retries, and safe failure behavior.
-- Stop and escalate credible high-impact vulnerabilities, data-loss risk, or unsafe migrations.
-
-Read `.ai/policies/SECURITY_GUIDELINES.md` only when the change touches a listed threat surface.
-
-## Verification
-
-Repository scripts are the canonical interface:
+Use repository scripts as the canonical interface:
 
 ```bash
 ./.ai/tools/format.sh --check
@@ -122,34 +108,29 @@ Repository scripts are the canonical interface:
 ./.ai/tools/verify.sh
 ```
 
-Committed commands live in `.ai/config/project.defaults.env`; ignored machine-local overrides live in `.ai/config/project.env`. A mandatory unavailable or skipped gate is a failure. Run focused checks during implementation and `./.ai/tools/verify.sh` before handoff and completion.
+Committed commands/requiredness live in `.ai/config/project.defaults.env`. Ignored
+`.ai/config/project.env` may customize focused commands, cannot weaken committed
+policy, and is ignored by `verify.sh`. A mandatory unavailable/skipped gate fails.
+Never claim an unobserved pass.
 
-## Independent review
+Normal/significant work requires a fresh independent reviewer. Review the accepted
+inputs, plan, full diff, tests, verification, security, compatibility, migration,
+operations, and affected documentation. Findings are `P0` critical emergency, `P1`
+must-fix, `P2` material, or `P3` optional. P0/P1 cannot remain or be waived; fixes
+require fresh reviewer verification.
 
-Normal and significant work requires a fresh reviewer context. Review requirements, durable specification, plan, diff, tests, verification, security, compatibility, migrations, operations, and documentation. Findings use:
+## Documentation and routing
 
-- `P0`: critical exploitability, imminent data loss, or equivalent emergency;
-- `P1`: must be fixed before merge;
-- `P2`: material issue that should be fixed;
-- `P3`: optional improvement.
+Document current truth, durable rationale, and actionable next steps—not chats, tool
+logs, or work diaries. Link to one canonical fact instead of duplicating it. During
+closeout, curate durable documentation before deleting temporary artifacts and reset
+`CURRENT_PLAN.md`.
 
-No unresolved `P0` or `P1` may remain. Fixes for those priorities require fresh verification by the reviewer.
+- Lifecycle/status: `.ai/policies/WORKFLOW.md`
+- Roles: `.ai/roles/{planner,implementer,code-reviewer}.md`
+- Security/dependencies: `.ai/policies/{SECURITY_GUIDELINES,DEPENDENCY_POLICY}.md`
+- Documentation/quality: `.ai/policies/{DOCUMENTATION_RULES,QUALITY_GATES}.md`
 
-## Documentation
-
-Document current truth, durable rationale, and actionable next steps—not chat transcripts or work diaries. Put each fact in one canonical location and link to it elsewhere. Update only documentation affected by the change and replace obsolete statements.
-
-During closeout, curate documentation before removing temporary artifacts. Git and the pull request provide process history; the durable specification and ADRs preserve product and architecture knowledge.
-
-## Context routing
-
-- Lifecycle and status transitions: `.ai/policies/WORKFLOW.md`
-- Planner instructions: `.ai/roles/planner.md`
-- Implementer instructions: `.ai/roles/implementer.md`
-- Reviewer instructions: `.ai/roles/code-reviewer.md`
-- Security: `.ai/policies/SECURITY_GUIDELINES.md`
-- Dependencies: `.ai/policies/DEPENDENCY_POLICY.md`
-- Documentation: `.ai/policies/DOCUMENTATION_RULES.md`
-- Quality policy: `.ai/policies/QUALITY_GATES.md`
-
-Use the optional engineering-knowledge MCP only when enabled in `.ai/project.yaml` and a concrete unresolved standards decision requires it. Retrieve narrowly and record adopted conclusions, not copied source material.
+Use the optional engineering-knowledge MCP only when enabled in `.ai/project.yaml`
+and a concrete unresolved standards decision requires it. Retrieve narrowly and
+record adopted conclusions, not copied source material.

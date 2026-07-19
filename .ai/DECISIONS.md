@@ -4,4 +4,3 @@ Use this file for small current operating decisions that do not justify an ADR. 
 
 | Date | Decision | Rationale | Scope/source |
 |---|---|---|---|
-| YYYY-MM-DD | Example | Brief reason | Requirement, MCP source ID, or owner |

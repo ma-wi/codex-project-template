@@ -35,9 +35,10 @@ $excludedTopLevel = @(
 $excludedRelativePaths = @(
     ".ai/work",
     ".ai/CURRENT_PLAN.md",
-    "docs/architecture/decisions/ADR-0000-template.md",
     "docs/architecture/decisions/ADR-0001-ai-control-plane.md",
     "docs/specifications/REQ-ai-control-plane-layout.md",
+    "docs/requirements/REQ-template-hardening.md",
+    "docs/specifications/REQ-template-hardening.md",
     ".github/workflows/template-copy.yml",
     ".ai/tools/create-project.sh",
     ".ai/tools/create-project.ps1",

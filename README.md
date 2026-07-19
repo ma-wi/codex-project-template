@@ -38,15 +38,17 @@ The copy contains reusable project rules, security policy, configuration, projec
 
 - `README.md`, `CHANGELOG.md`, and `CONTRIBUTING.md`;
 - `tests/` and temporary `.ai/work/` artifacts;
-- this template repository's control-plane migration specification and ADR;
-- the duplicate `ADR-0000-template.md` example (the canonical ADR template remains under `.ai/templates/`);
+- this template repository's own hardening/control-plane requirements, specifications, and ADR;
 - the project-copy scripts and `.ai/tools/verify-template.sh`;
 - the template-only Windows copy-test workflow;
 - Git/IDE state, local environments, caches, coverage, and build outputs.
 
 Bootstrap creates the new project README. Create the project changelog and contributing guide only when their actual policies and release process are known. `SECURITY.md` remains as a required project policy scaffold and must be completed with the real private reporting channel.
 
-The copied project intentionally starts without tests. The first implementation must add project-specific automated tests before the mandatory test gate and full `./.ai/tools/verify.sh` can pass. Before bootstrap, verification fails with an explicit bootstrap-required message because template self-tests are not part of the copied project.
+The copied project does not inherit template self-tests. React bootstrap creates a
+scaffold smoke test; other stacks must provide meaningful project tests, and the Bash
+gate fails explicitly when `tests/shell` is absent. Before bootstrap, verification
+fails with a bootstrap-required message.
 
 ## Configure and bootstrap
 
@@ -55,6 +57,7 @@ Edit `.ai/project.yaml` before bootstrap:
 - replace `project.name: "CHANGE_ME"`;
 - enable only required stacks;
 - choose the React package manager and project-relative directories;
+- when .NET is enabled, identify its solution and explicit test project;
 - enable the engineering-knowledge MCP only when it is actually configured.
 
 All configured paths must remain below the repository root. Absolute paths and `..` traversal are rejected.
@@ -79,7 +82,10 @@ Bootstrap may initialize the configured Python or React project and install the 
 .ai/config/project.defaults.env
 ```
 
-This file is the versioned source of truth for local verification and CI and must be committed. Machine-local overrides belong in ignored `.ai/config/project.env`. Never put secrets in either file.
+This file is the versioned source of truth for full local verification and CI and
+must be committed. Machine-local command overrides belong in ignored
+`.ai/config/project.env`; focused gates use them, while `verify.sh` ignores them.
+They cannot weaken mandatory policy. Never put secrets in either file.
 
 Review all generated manifest and lockfile changes before committing them.
 
@@ -102,7 +108,8 @@ Recommended repository settings:
 - enable secret scanning, dependency alerts, and code scanning where available;
 - use environment protection and OIDC rather than long-lived deployment secrets when deployment is later added.
 
-The included workflow uses least-privilege read permissions, pinned action commits, fixed runner images, concurrency cancellation, and timeouts.
+The included workflow uses least-privilege read permissions, pinned action commits,
+versioned runner labels, concurrency cancellation, and timeouts.
 
 ## Initial product planning
 
@@ -112,7 +119,7 @@ Do not invent the final architecture during template setup. First store the supp
 docs/requirements/REQ-001-initial-project.md
 ```
 
-Then start a fresh planning agent. The planner performs discovery when material product or architecture decisions remain unclear, creates the durable specification under `docs/specifications/`, proposes necessary ADRs, and creates only the temporary implementation plan/tasks needed for execution.
+Then start a fresh planning agent. The planner performs discovery when material product or architecture decisions remain unclear, creates the durable specification under `docs/specifications/`, proposes necessary ADRs, and creates only the temporary implementation plan/tasks needed for execution. The named authorized decision owner—not the planning agent—records acceptance.
 
 Accept the specification and architecture decisions before starting the implementation agent.
 
@@ -135,7 +142,8 @@ Do not implement production code.
 Act as the implementer. Read AGENTS.md, .ai/roles/implementer.md,
 .ai/CURRENT_PLAN.md, the accepted requirement/specification/ADRs, plan, and
 assigned ready tasks. Implement only accepted scope with tests. Run focused
-checks and ./.ai/tools/verify.sh. Do not mark work reviewed or done.
+checks and ./.ai/tools/verify.sh. Do not mark work reviewed. After independent
+approval, perform only assigned mechanical closeout; material changes return to review.
 ```
 
 ### Independent reviewer
@@ -193,7 +201,8 @@ For a configured project:
 ./.ai/tools/verify.sh
 ```
 
-Mandatory gates fail when their command is absent or skipped. `verify.sh` does not treat a mandatory skip as success.
+Mandatory gates fail when their command is absent or skipped. `verify.sh` ignores
+machine-local overrides and does not treat a mandatory skip as success.
 
 Before configuration, `verify.sh` recognizes `project.name: "CHANGE_ME"` and validates the template itself: documentation, shell/Python syntax, copy safety, dependency policy, bootstrap generation, and lifecycle state checks.
 
@@ -233,6 +242,7 @@ Remove unused stacks and their rules from a concrete project to reduce context a
 
 - [ ] Project name and enabled stacks are configured.
 - [ ] Bootstrap completed and generated changes were reviewed.
+- [ ] `SECURITY.md`, `.ai/PROJECT_CONTEXT.md`, and required quality decisions are complete.
 - [ ] `.ai/config/project.defaults.env`, manifests, and lockfiles are committed.
 - [ ] `./.ai/tools/verify.sh` executes every mandatory project gate.
 - [ ] GitHub branch protection requires CI.

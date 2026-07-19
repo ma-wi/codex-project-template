@@ -61,7 +61,11 @@ class BootstrapTests(unittest.TestCase):
                         "package_manager": "npm",
                     },
                     "bash": {"enabled": False},
-                    "dotnet": {"enabled": False, "solution": ""},
+                    "dotnet": {
+                        "enabled": False,
+                        "solution": "",
+                        "test_project": "",
+                    },
                 },
                 "engineering_knowledge": {"enabled": False},
                 "documentation": {
@@ -98,6 +102,36 @@ class BootstrapTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "unused_switch"):
             self.bootstrap.validate_config(data)
 
+    def test_dotnet_requires_explicit_test_project(self) -> None:
+        data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
+        data["stacks"]["python"]["enabled"] = False
+        data["stacks"]["dotnet"]["enabled"] = True
+        with self.assertRaisesRegex(SystemExit, "dotnet.test_project"):
+            self.bootstrap.validate_config(data)
+        data["stacks"]["dotnet"]["test_project"] = "tests/App.Tests/App.Tests.vbproj"
+        self.bootstrap.validate_config(data)
+        generated = self.bootstrap.generate_env(data)
+        self.assertIn("dotnet test", generated)
+        self.assertIn("tests/App.Tests/App.Tests.vbproj", generated)
+        self.assertIn('total="[1-9][0-9]*"', generated)
+
+    def test_powershell_files_require_a_pester_suite(self) -> None:
+        data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
+        data["stacks"]["python"]["enabled"] = False
+        data["stacks"]["dotnet"]["enabled"] = True
+        data["stacks"]["dotnet"]["test_project"] = "tests/App.Tests/App.Tests.vbproj"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "app.ps1").write_text("Write-Output 'sample'\n", encoding="utf-8")
+            original_root = getattr(self.bootstrap, "ROOT")
+            try:
+                setattr(self.bootstrap, "ROOT", root)
+                generated = self.bootstrap.generate_env(data)
+            finally:
+                setattr(self.bootstrap, "ROOT", original_root)
+        self.assertIn("*.Tests.ps1", generated)
+        self.assertNotIn("if (Test-Path tests/powershell)", generated)
+
     def test_react_package_managers_use_fixed_frozen_installs(self) -> None:
         data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
         data["stacks"]["react"]["enabled"] = True
@@ -122,6 +156,206 @@ class BootstrapTests(unittest.TestCase):
             smoke_test = (frontend / "src/App.test.tsx").read_text(encoding="utf-8")
             self.assertIn("renders the application shell", smoke_test)
             self.assertIn('import { expect, test } from "vitest"', smoke_test)
+
+    def test_bash_test_gate_fails_when_test_suite_is_absent(self) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Generated Bash gate execution runs on the Unix CI job")
+        data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
+        data["stacks"]["python"]["enabled"] = False
+        data["stacks"]["bash"]["enabled"] = True
+        generated = self.bootstrap.generate_env(data)
+        self.assertIn("test -d tests/shell", generated)
+        self.assertNotIn("if [ -d tests/shell ]", generated)
+        self.assertIn("REQUIRE_TEST=1", generated)
+        with tempfile.TemporaryDirectory() as temporary:
+            defaults = Path(temporary) / "defaults.env"
+            defaults.write_text(generated, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    shutil.which("bash") or "bash",
+                    "-c",
+                    'source "$1"; eval "${TEST_CMD}"',
+                    "gate-test",
+                    os.fspath(defaults),
+                ],
+                cwd=temporary,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, result.returncode)
+
+    def test_generated_stack_commands_fail_when_required_tools_are_missing(
+        self,
+    ) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Generated shell gate execution runs on the Unix CI job")
+        scenarios = (
+            ("python", "TEST_CMD"),
+            ("python", "SECURITY_CMD"),
+            ("python", "BUILD_CMD"),
+            ("react", "TEST_CMD"),
+            ("react", "DEPENDENCY_SCAN_CMD"),
+            ("react", "BUILD_CMD"),
+            ("dotnet", "TEST_CMD"),
+            ("dotnet", "DEPENDENCY_SCAN_CMD"),
+            ("dotnet", "BUILD_CMD"),
+        )
+        for stack, variable in scenarios:
+            with self.subTest(stack=stack, variable=variable):
+                data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
+                for settings in data["stacks"].values():
+                    settings["enabled"] = False
+                data["stacks"][stack]["enabled"] = True
+                if stack == "dotnet":
+                    data["stacks"]["dotnet"]["test_project"] = (
+                        "tests/App.Tests/App.Tests.vbproj"
+                    )
+                with tempfile.TemporaryDirectory() as temporary:
+                    if stack == "react":
+                        (Path(temporary) / "frontend").mkdir()
+                    defaults = Path(temporary) / "defaults.env"
+                    defaults.write_text(
+                        self.bootstrap.generate_env(data), encoding="utf-8"
+                    )
+                    result = subprocess.run(
+                        [
+                            shutil.which("bash") or "bash",
+                            "-c",
+                            f'source "$1"; eval "${{{variable}}}"',
+                            "gate-test",
+                            os.fspath(defaults),
+                        ],
+                        cwd=temporary,
+                        env={"PATH": ""},
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertNotEqual(0, result.returncode)
+
+    def test_generated_python_test_gate_fails_with_zero_collected_tests(self) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Generated Python shell gate runs on the Unix CI job")
+        data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
+        generated = self.bootstrap.generate_env(data)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            fake_uv = fake_bin / "uv"
+            fake_uv.write_text(
+                '#!/usr/bin/env bash\nexec "$PYTHON_FOR_TEST" -m pytest\n',
+                encoding="utf-8",
+            )
+            fake_uv.chmod(0o755)
+            defaults = root / "defaults.env"
+            defaults.write_text(generated, encoding="utf-8")
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            environment["PYTHON_FOR_TEST"] = sys.executable
+            result = subprocess.run(
+                [
+                    shutil.which("bash") or "bash",
+                    "-c",
+                    'source "$1"; eval "${TEST_CMD}"',
+                    "gate-test",
+                    os.fspath(defaults),
+                ],
+                cwd=root,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("no tests ran", result.stdout)
+
+    def test_generated_dotnet_gate_requires_tests_and_pester_suite(self) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Generated .NET shell gate runs on the Unix CI job")
+        data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
+        data["stacks"]["python"]["enabled"] = False
+        data["stacks"]["dotnet"]["enabled"] = True
+        data["stacks"]["dotnet"]["test_project"] = "tests/App.Tests/App.Tests.vbproj"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "app.ps1").write_text("Write-Output 'sample'\n", encoding="utf-8")
+            original_root = getattr(self.bootstrap, "ROOT")
+            try:
+                setattr(self.bootstrap, "ROOT", root)
+                generated = self.bootstrap.generate_env(data)
+            finally:
+                setattr(self.bootstrap, "ROOT", original_root)
+
+            defaults = root / "defaults.env"
+            defaults.write_text(generated, encoding="utf-8")
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            fake_dotnet = fake_bin / "dotnet"
+            fake_dotnet.write_text(
+                "#!/usr/bin/env python3\n"
+                "import os, pathlib, sys\n"
+                "args = sys.argv[1:]\n"
+                "result_dir = pathlib.Path(args[args.index('--results-directory') + 1])\n"
+                "result_dir.mkdir(parents=True, exist_ok=True)\n"
+                "total = os.environ['DOTNET_TEST_TOTAL']\n"
+                "(result_dir / 'agent-template.trx').write_text(f'<Counters total=\"{total}\" />\\n')\n",
+                encoding="utf-8",
+            )
+            fake_dotnet.chmod(0o755)
+            fake_pwsh = fake_bin / "pwsh"
+            fake_pwsh.write_text(
+                "#!/usr/bin/env python3\nraise SystemExit(0)\n", encoding="utf-8"
+            )
+            fake_pwsh.chmod(0o755)
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            command = [
+                shutil.which("bash") or "bash",
+                "-c",
+                'source "$1"; eval "${TEST_CMD}"',
+                "gate-test",
+                os.fspath(defaults),
+            ]
+
+            environment["DOTNET_TEST_TOTAL"] = "2"
+            missing_pester = subprocess.run(
+                command,
+                cwd=root,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, missing_pester.returncode)
+
+            pester_dir = root / "tests/powershell"
+            pester_dir.mkdir(parents=True)
+            (pester_dir / "App.Tests.ps1").write_text(
+                "Describe 'sample' {}\n", encoding="utf-8"
+            )
+            environment["DOTNET_TEST_TOTAL"] = "0"
+            zero_dotnet_tests = subprocess.run(
+                command,
+                cwd=root,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, zero_dotnet_tests.returncode)
+
+            environment["DOTNET_TEST_TOTAL"] = "2"
+            passing = subprocess.run(
+                command,
+                cwd=root,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, passing.returncode, passing.stdout + passing.stderr)
 
     def test_paths_cannot_escape_repository(self) -> None:
         with self.assertRaises(SystemExit):
@@ -163,6 +397,25 @@ class BootstrapTests(unittest.TestCase):
             self.assertIn("Generated by .ai/tools/bootstrap.py", defaults)
             self.assertNotIn("project.env\n", result.stdout)
 
+    def test_bootstrap_replaces_completed_bootstrap_next_step(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / ".ai/NEXT_STEPS.md"
+            path.parent.mkdir()
+            path.write_text(
+                "# Next steps\n\n1. Run bootstrap and commit the generated files.\n",
+                encoding="utf-8",
+            )
+            original_root = getattr(self.bootstrap, "ROOT")
+            try:
+                setattr(self.bootstrap, "ROOT", root)
+                self.bootstrap.update_next_steps()
+            finally:
+                setattr(self.bootstrap, "ROOT", original_root)
+            updated = path.read_text(encoding="utf-8")
+            self.assertNotIn("Run bootstrap", updated)
+            self.assertIn("SECURITY.md", updated)
+
 
 class GateTests(unittest.TestCase):
     def test_required_missing_command_fails(self) -> None:
@@ -186,6 +439,32 @@ class GateTests(unittest.TestCase):
             )
             self.assertNotEqual(0, result.returncode)
             self.assertIn("required but no command", result.stderr)
+
+    def test_local_override_cannot_disable_committed_required_gate(self) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Bash gate test runs on the Unix CI job")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".ai/tools").mkdir(parents=True)
+            (root / ".ai/config").mkdir()
+            for name in ("lib.sh", "format.sh"):
+                shutil.copy2(AI_TOOLS / name, root / ".ai/tools" / name)
+            (root / ".ai/config/project.defaults.env").write_text(
+                "FORMAT_CHECK_CMD='true'\nREQUIRE_FORMAT_CHECK=1\n",
+                encoding="utf-8",
+            )
+            (root / ".ai/config/project.env").write_text(
+                "REQUIRE_FORMAT_CHECK=0\n", encoding="utf-8"
+            )
+            result = subprocess.run(
+                ["bash", os.fspath(root / ".ai/tools/format.sh"), "--check"],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("cannot weaken committed policy", result.stderr)
 
 
 class DependencyPolicyTests(unittest.TestCase):
@@ -319,6 +598,59 @@ class DependencyPolicyTests(unittest.TestCase):
             self.assertNotEqual(0, result.returncode)
             self.assertIn("not on allow-list", result.stderr)
 
+    def test_unknown_requirement_syntax_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.make_repository(temporary)
+            (root / "requirements.txt").write_text(
+                "--index-url https://example.invalid/simple\n"
+                "example-package @ git+https://example.invalid/repo.git@main\n",
+                encoding="utf-8",
+            )
+            result = self.run_policy(root, REQUIRE_LOCKFILES="0")
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("unsupported dependency syntax", result.stderr)
+
+    def test_remote_npm_dependency_source_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.make_repository(temporary)
+            (root / "package.json").write_text(
+                json.dumps(
+                    {"dependencies": {"example": "github:owner/repository#main"}}
+                ),
+                encoding="utf-8",
+            )
+            (root / "package-lock.json").write_text("{}\n", encoding="utf-8")
+            result = self.run_policy(root)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("remote or mutable source", result.stderr)
+
+    def test_poetry_git_dependency_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.make_repository(temporary)
+            (root / "pyproject.toml").write_text(
+                '[tool.poetry]\nname="sample"\nversion="0.1.0"\n'
+                '[tool.poetry.dependencies]\npython="^3.13"\n'
+                'evil={git="https://example.invalid/evil.git", branch="main"}\n',
+                encoding="utf-8",
+            )
+            (root / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+            result = self.run_policy(root)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("remote or mutable source", result.stderr)
+
+    def test_cargo_path_dependency_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.make_repository(temporary)
+            (root / "Cargo.toml").write_text(
+                '[package]\nname="sample"\nversion="0.1.0"\n'
+                '[dependencies]\nevil={version="1.0.0", path="../evil"}\n',
+                encoding="utf-8",
+            )
+            (root / "Cargo.lock").write_text("# lock\n", encoding="utf-8")
+            result = self.run_policy(root)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("remote or mutable source", result.stderr)
+
 
 class CopySafetyTests(unittest.TestCase):
     def make_copy_fixture(self, root: Path) -> Path:
@@ -390,9 +722,10 @@ class CopySafetyTests(unittest.TestCase):
             "CONTRIBUTING.md",
             "tests",
             ".ai/work",
-            "docs/architecture/decisions/ADR-0000-template.md",
             "docs/architecture/decisions/ADR-0001-ai-control-plane.md",
             "docs/specifications/REQ-ai-control-plane-layout.md",
+            "docs/requirements/REQ-template-hardening.md",
+            "docs/specifications/REQ-template-hardening.md",
             ".github/workflows/template-copy.yml",
             ".ai/tools/create-project.sh",
             ".ai/tools/create-project.ps1",
@@ -718,6 +1051,74 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             self.assertIn("1 task file", result.stdout)
 
+    def test_work_directory_traversal_is_rejected_after_normalization(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".ai/tools").mkdir(parents=True)
+            shutil.copy2(
+                AI_TOOLS / "check-work-state.py",
+                root / ".ai/tools/check-work-state.py",
+            )
+            escaped = root / ".ai/escaped"
+            escaped.mkdir(parents=True)
+            (escaped / "PLAN.md").write_text(
+                "# Plan\n\n- Change class: normal\n", encoding="utf-8"
+            )
+            (root / ".ai/CURRENT_PLAN.md").write_text(
+                "# Current work\n\n"
+                "- Work directory: `.ai/work/../escaped/`\n"
+                "- Specification: `not-required`\n"
+                "- Plan: `.ai/work/../escaped/PLAN.md`\n"
+                "- Status: implementation\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [sys.executable, os.fspath(root / ".ai/tools/check-work-state.py")],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("below .ai/work", result.stdout)
+
+    def test_specification_traversal_is_rejected_after_normalization(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".ai/tools").mkdir(parents=True)
+            shutil.copy2(
+                AI_TOOLS / "check-work-state.py",
+                root / ".ai/tools/check-work-state.py",
+            )
+            work = root / ".ai/work/REQ-001"
+            work.mkdir(parents=True)
+            (work / "PLAN.md").write_text(
+                "# Plan\n\n- Change class: significant\n", encoding="utf-8"
+            )
+            escaped_spec = root / "docs/escaped.md"
+            escaped_spec.parent.mkdir()
+            escaped_spec.write_text(
+                "- Status: ready-for-implementation\n- Ready for implementation: yes\n",
+                encoding="utf-8",
+            )
+            (root / ".ai/CURRENT_PLAN.md").write_text(
+                "# Current work\n\n"
+                "- Work directory: `.ai/work/REQ-001/`\n"
+                "- Specification: `docs/specifications/../escaped.md`\n"
+                "- Plan: `.ai/work/REQ-001/PLAN.md`\n"
+                "- Status: implementation\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [sys.executable, os.fspath(root / ".ai/tools/check-work-state.py")],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("below docs/specifications", result.stdout)
+
 
 class ConfiguredProjectVerificationTests(unittest.TestCase):
     def make_project(self, temporary: str, test_command: str = "true") -> Path:
@@ -739,6 +1140,31 @@ class ConfiguredProjectVerificationTests(unittest.TestCase):
         )
         (root / "README.md").write_text("# Configured project\n", encoding="utf-8")
         (root / "AGENTS.md").write_text("# Project rules\n", encoding="utf-8")
+        (root / "SECURITY.md").write_text(
+            "# Security policy\n\n- Status: ready\n\n"
+            "Report vulnerabilities privately to security@example.invalid.\n"
+            "Supported release lines receive security updates.\n",
+            encoding="utf-8",
+        )
+        (root / ".ai/PROJECT_CONTEXT.md").write_text(
+            "# Project context\n\n## Purpose\n\n"
+            "- Product or service: configured test project\n"
+            "- Primary users: template maintainers\n"
+            "- Main outcome: verified project scaffolding\n",
+            encoding="utf-8",
+        )
+        (root / ".ai/policies").mkdir()
+        (root / ".ai/policies/QUALITY_GATES.md").write_text(
+            "# Quality gates\n\n## Required project decisions\n\n"
+            "- Minimum coverage policy: changed behavior is covered\n"
+            "- Supported runtime matrix: CI runtime\n"
+            "- Warning-as-error policy: enabled\n"
+            "- Security severity threshold: high\n"
+            "- Dependency update policy: reviewed updates\n"
+            "- Flaky-test policy: quarantine is prohibited\n"
+            "- CI required checks: verify\n",
+            encoding="utf-8",
+        )
         (root / ".ai/config/project.defaults.env").write_text(
             "FORMAT_CHECK_CMD='true'\nFORMAT_APPLY_CMD='true'\nLINT_CMD='true'\n"
             f"TEST_CMD='{test_command}'\nSECURITY_CMD='true'\nDEPENDENCY_SCAN_CMD='true'\nBUILD_CMD='true'\n"
@@ -777,6 +1203,66 @@ class ConfiguredProjectVerificationTests(unittest.TestCase):
             )
             self.assertNotEqual(0, result.returncode)
             self.assertIn("tests: FAIL", result.stderr)
+
+    def test_full_verification_ignores_local_command_override(self) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Project verification runs on the Unix CI job")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.make_project(temporary, test_command="false")
+            (root / ".ai/config/project.env").write_text(
+                "TEST_CMD='true'\n", encoding="utf-8"
+            )
+            result = subprocess.run(
+                ["bash", os.fspath(root / ".ai/tools/verify.sh")],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("tests: FAIL", result.stderr)
+
+    def test_incomplete_security_scaffold_fails_documentation_gate(self) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Project verification runs on the Unix CI job")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.make_project(temporary)
+            (root / "SECURITY.md").write_text(
+                "# Security policy\n\nReplace this section with the project's private security reporting channel.\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                ["bash", os.fspath(root / ".ai/tools/verify.sh")],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("security reporting channel is incomplete", result.stdout)
+
+    def test_incomplete_quality_decision_fails_documentation_gate(self) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Project verification runs on the Unix CI job")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.make_project(temporary)
+            quality = root / ".ai/policies/QUALITY_GATES.md"
+            quality.write_text(
+                quality.read_text(encoding="utf-8").replace(
+                    "- Minimum coverage policy: changed behavior is covered",
+                    "- Minimum coverage policy:",
+                ),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                ["bash", os.fspath(root / ".ai/tools/verify.sh")],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("quality decision field is incomplete", result.stdout)
 
 
 if __name__ == "__main__":

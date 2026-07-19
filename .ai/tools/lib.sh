@@ -15,10 +15,29 @@ if [[ -f "${AI_CONFIG_DIR}/project.defaults.env" ]]; then
   source "${AI_CONFIG_DIR}/project.defaults.env"
 fi
 
-if [[ -f "${AI_CONFIG_DIR}/project.env" ]]; then
+required_policy_names=(
+  REQUIRE_SETUP REQUIRE_FORMAT_CHECK REQUIRE_LINT REQUIRE_TEST REQUIRE_SECURITY
+  REQUIRE_DEPENDENCY_POLICY REQUIRE_DEPENDENCY_SCANNERS REQUIRE_BUILD
+  REQUIRE_LOCKFILES REJECT_FLOATING_VERSIONS
+)
+declare -A committed_required_policy=()
+for policy_name in "${required_policy_names[@]}"; do
+  if [[ -n "${!policy_name+x}" ]]; then
+    committed_required_policy["${policy_name}"]="${!policy_name}"
+  fi
+done
+
+if [[ "${AGENT_TEMPLATE_IGNORE_LOCAL_OVERRIDES:-0}" != "1" && -f "${AI_CONFIG_DIR}/project.env" ]]; then
   # shellcheck disable=SC1091
   source "${AI_CONFIG_DIR}/project.env"
 fi
+
+for policy_name in "${!committed_required_policy[@]}"; do
+  if [[ "${committed_required_policy[${policy_name}]}" == "1" && "${!policy_name:-}" != "1" ]]; then
+    printf '[agent-template] ERROR: local override cannot weaken committed policy %s=1.\n' "${policy_name}" >&2
+    return 1
+  fi
+done
 
 log() {
   printf '[agent-template] %s\n' "$*"

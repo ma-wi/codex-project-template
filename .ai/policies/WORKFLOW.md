@@ -1,102 +1,93 @@
 # Canonical agent workflow
 
-This file owns the lifecycle. Role files contain only role-specific responsibilities.
-
-## Operating model
-
-Use one active requirement per Git branch or worktree. Planning another feature while implementation is active requires another branch/worktree. `CURRENT_PLAN.md` therefore remains a single compact pointer.
-
-The normal role sequence is:
+This file owns lifecycle and status transitions; role files add only role-specific
+responsibilities. Use one active requirement per branch/worktree.
 
 ```text
 planner → implementer → independent reviewer
                     ↖ remediation ↙
-                 curation and closeout
+                 mechanical closeout
 ```
 
-Testing, security, and documentation are review lenses. Use a separate specialist context only for significant risk or an explicit project requirement.
+Testing, security, dependencies, and documentation are conditional review lenses.
+Use a specialist context only for significant risk or an explicit requirement.
 
 ## 1. Intake and classification
 
-The planner reads the requirement, project configuration, current context, applicable ADRs, and relevant existing code/tests. Record the change class:
-
-- `trivial`: mechanical and behavior-neutral;
-- `normal`: bounded behavioral work;
-- `significant`: initial project, subsystem, public API, migration, sensitive security/privacy work, major integration, or broad ambiguity.
-
-Material uncertainty moves work upward, not downward.
+The planner reads the requirement, configuration, context, applicable ADRs, and
+relevant code/tests. Record the `trivial`, `normal`, or `significant` class defined in
+`AGENTS.md`; material uncertainty raises the class.
 
 ## 2. Discovery and durable specification
 
-For significant or materially unclear work, use `FEATURE_DISCOVERY.md`. Resolve the problem, users, workflows, scope, domain rules, data, interfaces, risks, operations, and acceptance criteria one decision branch at a time. Ask only questions that can materially change the outcome and obtain explicit shared-understanding confirmation.
+For significant or materially unclear work, create
+`.ai/work/<requirement-id>/DISCOVERY.md` from
+`.ai/templates/FEATURE_DISCOVERY.md`. Resolve only decisions that can change outcome,
+scope, behavior, risk, architecture, or acceptance criteria, then obtain explicit
+shared-understanding confirmation.
 
-Create the accepted specification at:
-
-```text
-docs/specifications/<requirement-id>.md
-```
-
-The specification is durable and owns observable behavior, accepted decisions, scope, acceptance criteria, and stable test seams. New architecture decisions become proposed ADRs during planning and must be accepted before dependent implementation begins.
-
-Implementation may begin only when significant specifications contain:
+Store significant specifications at `docs/specifications/<requirement-id>.md`. They
+own observable behavior, scope, accepted decisions, criteria, and stable test seams.
+Agents propose requirements, specifications, and ADRs; a named authorized decision
+owner records acceptance. Dependent implementation waits for accepted ADRs and:
 
 ```text
 Status: ready-for-implementation
 Ready for implementation: yes
 ```
 
-## 3. Temporary implementation planning
+## 3. Temporary planning
 
-For normal and significant work create:
+Normal/significant work uses:
 
 ```text
 .ai/work/<requirement-id>/
+├── DISCOVERY.md           # only when needed
 ├── PLAN.md
-└── tasks/                 # only for independently implementable units
+└── tasks/                 # only independently implementable units
 ```
 
-The plan owns implementation approach, sequencing, affected areas, risks, verification, migration/rollback, and documentation changes. It links to rather than duplicates the durable specification. Update `CURRENT_PLAN.md`.
-
-Planner task statuses are `draft` or `ready`.
+The plan links to durable inputs and records approach, sequence, affected areas,
+risks, verification, migration/recovery, and documentation. Update
+`.ai/CURRENT_PLAN.md`. Planner task statuses are `draft` or `ready`.
 
 ## 4. Implementation
 
-The implementer selects a `ready` task, marks it `in-progress`, and implements the smallest coherent behavior slice. Tests change with behavior. After code and tests are complete, mark the task `implemented`; after focused checks pass, mark it `verified`.
-
-Update the plan before material deviations. Do not silently expand scope.
+The implementer takes a `ready` task, marks it `in-progress`, and implements the
+smallest coherent behavior slice with tests. Record material deviations before
+continuing. After code/tests are complete mark `implemented`; after focused checks
+pass mark `verified`.
 
 ## 5. Full verification
 
-Run:
-
-```bash
-./.ai/tools/verify.sh
-```
-
-Every configured mandatory gate must execute and pass. Record the exact commands and results in the plan/task handoff. A mandatory skip is a failure.
+Run `./.ai/tools/verify.sh`. Every configured mandatory gate must execute and pass;
+a mandatory skip fails. Record exact commands/results and environment limitations.
 
 ## 6. Independent review and remediation
 
-Use a fresh reviewer context for normal and significant work. The reviewer compares the requirement, durable specification, accepted ADRs, plan, complete diff, tests, verification evidence, and affected documentation.
+A fresh reviewer context compares requirement, specification, ADRs, plan, full diff,
+tests, verification, and affected documentation. Record findings in
+`.ai/work/<requirement-id>/REVIEW.md` or the pull request. The reviewer may advance
+verified tasks to `reviewed`; findings return affected work to `in-progress` or
+`blocked`.
 
-The reviewer records findings in `.ai/work/<requirement-id>/REVIEW.md` or directly in the pull request. Verified tasks may become `reviewed`. Findings return affected tasks to `in-progress` or `blocked`.
+The implementer remediates and reruns focused/full verification. P0/P1 fixes require
+a fresh reviewer pass.
 
-The implementer remediates findings and reruns focused and full verification. `P0` and `P1` fixes require a fresh reviewer pass.
+## 7. Mechanical closeout
 
-## 7. Curation and closeout
+After approval, the implementation context:
 
-Only after review is satisfied:
+1. reconciles maintained documentation and accepted ADRs;
+2. moves unresolved work to issues or `.ai/NEXT_STEPS.md`;
+3. runs `check-docs.py` and final `verify.sh`;
+4. records outcome, verification, residual risks, and dependencies in the PR;
+5. marks reviewed tasks `done`, transfers durable information, removes temporary
+   work, and resets `CURRENT_PLAN.md`.
 
-1. reconcile current-state documentation with the final code;
-2. ensure accepted architecture decisions are in ADRs;
-3. move unresolved work to issues or `NEXT_STEPS.md`;
-4. run `./.ai/tools/check-docs.py` and final `./.ai/tools/verify.sh`;
-5. record outcome, verification, residual risks, and dependency changes in the pull request;
-6. mark reviewed tasks `done`;
-7. remove the temporary work directory after durable information is transferred;
-8. reset `CURRENT_PLAN.md` to idle.
-
-The accepted requirement, specification, ADRs, code, tests, maintained documentation, and pull request are the lasting record. Temporary task history is not retained merely as documentation.
+Any material closeout change returns to review. Lasting records are accepted durable
+inputs, code/tests, maintained documentation, and the pull request—not temporary task
+history.
 
 ## Status model
 
@@ -104,8 +95,10 @@ The accepted requirement, specification, ADRs, code, tests, maintained documenta
 draft → ready → in-progress → implemented → verified → reviewed → done
 ```
 
-`blocked` may be used from an active state with a concrete blocking condition.
+`blocked` requires a concrete blocking condition.
 
-## External reference decision
+## External references
 
-Consult the configured engineering-knowledge MCP only for a concrete unresolved architecture, security, privacy, accessibility, public-interface, integration, or dependency decision when local guidance is insufficient. Record source identifiers and adopted conclusions in the durable specification or ADR. Do not store broad excerpts.
+Use the configured engineering-knowledge MCP only for a concrete unresolved
+standards-sensitive decision when local guidance is insufficient. Record source IDs
+and adopted conclusions in the specification or ADR; never store broad excerpts.

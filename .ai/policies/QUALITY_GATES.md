@@ -1,18 +1,20 @@
 # Quality gates
 
-Customize this file during project bootstrap. Mark each gate as mandatory, conditional, or not applicable.
+Bootstrap derives executable stack gates into committed
+`.ai/config/project.defaults.env`. Complete the project decisions below before full
+verification can pass.
 
 | Gate | Policy | Canonical command | Notes |
 |---|---|---|---|
-| Formatting | Mandatory | `./.ai/tools/format.sh --check` | No formatting drift |
-| Linting | Mandatory | `./.ai/tools/lint.sh` | Include project style rules |
+| Formatting | Required when the enabled stack has a formatter | `./.ai/tools/format.sh --check` | No formatting drift |
+| Linting | Required for every enabled code stack | `./.ai/tools/lint.sh` | Include static analysis where applicable |
 | Static typing | Conditional | Included in lint/build | Required for typed projects |
 | Unit tests | Mandatory | `./.ai/tools/test.sh` | Behavior changes require tests |
 | Integration tests | Conditional | Included in test command | Required for component interactions |
 | End-to-end tests | Conditional | Project-specific | Required for critical user flows |
-| Build/package | Mandatory | `./.ai/tools/build.sh` | Must produce expected artifact |
-| Secret scan | Conditional until configured | `./.ai/tools/security.sh` | Make mandatory before handling credentials or production deployment |
-| Dependency scan | Mandatory | `./.ai/tools/security.sh` | Include lockfile-aware audit |
+| Build/package | Required when the project produces an artifact | `./.ai/tools/build.sh` | Must produce expected artifact |
+| Secret scan | Required before the repository handles credentials or secret-bearing configuration | CI or configured `SECURITY_CMD` | Source-host scanning may satisfy this decision |
+| Dependency policy/scan | Mandatory when manifests exist | `./.ai/tools/check-dependencies.sh` | Lockfile-aware policy and vulnerability audit |
 | Static security analysis | Conditional | `./.ai/tools/security.sh` | Mandatory for security-sensitive code |
 | License policy | Conditional | Project-specific | Required when distribution demands it |
 | Migration validation | Conditional | Project-specific | Include upgrade and rollback behavior |
@@ -28,7 +30,10 @@ A non-mandatory gate may be skipped only when:
 - it is explicitly not applicable; or
 - the environment cannot execute it and the limitation is reported.
 
-A skipped mandatory gate fails immediately. Gate commands and required flags are committed in `.ai/config/project.defaults.env`; ignored `.ai/config/project.env` values are local overrides only.
+A skipped mandatory gate fails immediately. Gate commands and required flags are
+committed in `.ai/config/project.defaults.env`. Ignored `.ai/config/project.env`
+may customize focused gate commands but cannot weaken committed requiredness and is
+ignored by full `verify.sh`.
 
 ## Failure policy
 
@@ -54,4 +59,7 @@ Do not disable rules, delete tests, reduce coverage, suppress findings, or chang
 
 ## Dependency and package gate
 
-Run `./.ai/tools/check-dependencies.sh` for changes to manifests, lockfiles, build logic, registries, or generated dependency metadata. It checks repository policy, deny/allow lists, lockfile requirements, floating versions, known vulnerabilities, license risks, and optional package-reputation tooling. The full `verify.sh` workflow also runs this gate.
+Run `./.ai/tools/check-dependencies.sh` for changes to manifests, lockfiles, build
+logic, registries, or generated dependency metadata. It enforces source and lockfile
+policy and invokes configured vulnerability, license, or reputation scanners. Manual
+provenance and license review remains required where automation cannot decide.

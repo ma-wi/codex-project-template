@@ -60,9 +60,10 @@ fi
 root_files=(
   'README.md' 'CHANGELOG.md' 'CONTRIBUTING.md'
   '.github/workflows/template-copy.yml'
-  'docs/architecture/decisions/ADR-0000-template.md'
   'docs/architecture/decisions/ADR-0001-ai-control-plane.md'
   'docs/specifications/REQ-ai-control-plane-layout.md'
+  'docs/requirements/REQ-template-hardening.md'
+  'docs/specifications/REQ-template-hardening.md'
   '.ai/CURRENT_PLAN.md'
   '.ai/tools/create-project.sh' '.ai/tools/create-project.ps1'
   '.ai/tools/verify-template.sh' '.ai/config/project.env'

@@ -12,6 +12,10 @@ fi
 
 failures=0
 
+# Full verification is reproducible and uses only committed policy/commands.
+# Local overrides remain available to individual focused gate scripts.
+export AGENT_TEMPLATE_IGNORE_LOCAL_OVERRIDES=1
+
 run_gate() {
   local name="$1"
   shift

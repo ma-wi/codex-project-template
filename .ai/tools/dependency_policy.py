@@ -68,6 +68,101 @@ def add(
         )
 
 
+def add_poetry_dependency(
+    result: list[tuple[str, str | None, Path]],
+    errors: list[str],
+    name: str,
+    value: object,
+    source: Path,
+) -> None:
+    if name.lower() == "python":
+        return
+    if isinstance(value, str):
+        add(result, "pypi", name, value, source)
+        return
+    if not isinstance(value, dict):
+        errors.append(
+            f"unsupported dependency syntax in {source.relative_to(ROOT)}: {name!r}={value!r}"
+        )
+        return
+    source_keys = {"git", "path", "url", "source", "branch", "tag", "rev"}
+    present_source_keys = sorted(source_keys.intersection(value))
+    if present_source_keys:
+        errors.append(
+            f"remote or mutable source: pypi:{name} uses {', '.join(present_source_keys)} "
+            f"({source.relative_to(ROOT)})"
+        )
+        return
+    allowed_keys = {"version", "markers", "python", "extras", "optional"}
+    unknown = sorted(set(value) - allowed_keys)
+    if unknown:
+        errors.append(
+            f"unsupported dependency syntax in {source.relative_to(ROOT)}: "
+            f"pypi:{name} uses {', '.join(unknown)}"
+        )
+        return
+    version = value.get("version")
+    if not isinstance(version, str):
+        errors.append(
+            f"unsupported dependency syntax in {source.relative_to(ROOT)}: "
+            f"pypi:{name} requires a string version"
+        )
+        return
+    add(result, "pypi", name, version, source)
+
+
+def add_cargo_dependencies(
+    result: list[tuple[str, str | None, Path]],
+    errors: list[str],
+    values: object,
+    source: Path,
+) -> None:
+    if not isinstance(values, dict):
+        errors.append(
+            f"unsupported dependency section in {source.relative_to(ROOT)}: expected a table"
+        )
+        return
+    for name, value in values.items():
+        if isinstance(value, str):
+            add(result, "cargo", name, value, source)
+            continue
+        if not isinstance(value, dict):
+            errors.append(
+                f"unsupported dependency syntax in {source.relative_to(ROOT)}: {name!r}={value!r}"
+            )
+            continue
+        source_keys = {"git", "path", "branch", "tag", "rev", "registry"}
+        present_source_keys = sorted(source_keys.intersection(value))
+        if present_source_keys:
+            errors.append(
+                f"remote or mutable source: cargo:{name} uses {', '.join(present_source_keys)} "
+                f"({source.relative_to(ROOT)})"
+            )
+            continue
+        allowed_keys = {
+            "version",
+            "features",
+            "optional",
+            "default-features",
+            "package",
+        }
+        unknown = sorted(set(value) - allowed_keys)
+        if unknown:
+            errors.append(
+                f"unsupported dependency syntax in {source.relative_to(ROOT)}: "
+                f"cargo:{name} uses {', '.join(unknown)}"
+            )
+            continue
+        version = value.get("version")
+        if not isinstance(version, str):
+            errors.append(
+                f"unsupported dependency syntax in {source.relative_to(ROOT)}: "
+                f"cargo:{name} requires a string version"
+            )
+            continue
+        add(result, "cargo", name, version, source)
+
+
 def parse_xml(path: Path, errors: list[str]) -> ElementTree.Element | None:
     try:
         content = path.read_bytes()
@@ -112,18 +207,30 @@ def read_dependencies(errors: list[str]) -> list[tuple[str, str | None, Path]]:
             "peerDependencies",
         ):
             for name, version in (data.get(section) or {}).items():
-                add(found, "npm", name, str(version), package_json)
+                if not isinstance(version, str):
+                    errors.append(
+                        f"unsupported dependency syntax in {package_json.relative_to(ROOT)}: {name!r} must have a string version"
+                    )
+                    continue
+                add(found, "npm", name, version, package_json)
 
     for requirements in manifests("requirements*.txt"):
-        for raw in requirements.read_text(encoding="utf-8").splitlines():
+        for number, raw in enumerate(
+            requirements.read_text(encoding="utf-8").splitlines(), 1
+        ):
             line = raw.strip()
-            if not line or line.startswith("#") or line.startswith(("-r", "--")):
+            if not line or line.startswith("#"):
                 continue
-            match = re.match(
-                r"([A-Za-z0-9_.-]+)\s*([<>=!~].*)?$", line.split(";")[0].strip()
+            match = re.fullmatch(
+                r"([A-Za-z0-9_.-]+)(?:\[[A-Za-z0-9_.-]+(?:,[A-Za-z0-9_.-]+)*\])?\s*([<>=!~].*)?",
+                line.split(";")[0].strip(),
             )
             if match:
                 add(found, "pypi", match.group(1), match.group(2), requirements)
+            else:
+                errors.append(
+                    f"unsupported dependency syntax in {requirements.relative_to(ROOT)}:{number}: {line!r}"
+                )
 
     for pyproject in manifests("pyproject.toml"):
         try:
@@ -141,9 +248,41 @@ def read_dependencies(errors: list[str]) -> list[tuple[str, str | None, Path]]:
         for values in (data.get("dependency-groups", {}) or {}).values():
             groups.extend(values or [])
         for specification in groups:
-            match = re.match(r"([A-Za-z0-9_.-]+)\s*(.*)$", str(specification))
+            if not isinstance(specification, str):
+                errors.append(
+                    f"unsupported dependency syntax in {pyproject.relative_to(ROOT)}: {specification!r}"
+                )
+                continue
+            match = re.fullmatch(
+                r"([A-Za-z0-9_.-]+)(?:\[[A-Za-z0-9_.-]+(?:,[A-Za-z0-9_.-]+)*\])?\s*(.*)",
+                specification,
+            )
             if match:
                 add(found, "pypi", match.group(1), match.group(2), pyproject)
+            else:
+                errors.append(
+                    f"unsupported dependency syntax in {pyproject.relative_to(ROOT)}: {specification!r}"
+                )
+        poetry = data.get("tool", {}).get("poetry", {}) or {}
+        poetry_sections: list[object] = [
+            poetry.get("dependencies", {}) or {},
+            poetry.get("dev-dependencies", {}) or {},
+        ]
+        for group in (poetry.get("group", {}) or {}).values():
+            if isinstance(group, dict):
+                poetry_sections.append(group.get("dependencies", {}) or {})
+            else:
+                errors.append(
+                    f"unsupported Poetry group syntax in {pyproject.relative_to(ROOT)}: {group!r}"
+                )
+        for poetry_section in poetry_sections:
+            if not isinstance(poetry_section, dict):
+                errors.append(
+                    f"unsupported Poetry dependency section in {pyproject.relative_to(ROOT)}"
+                )
+                continue
+            for name, value in poetry_section.items():
+                add_poetry_dependency(found, errors, str(name), value, pyproject)
 
     for project in [
         *manifests("*.csproj"),
@@ -187,12 +326,30 @@ def read_dependencies(errors: list[str]) -> list[tuple[str, str | None, Path]]:
         except (tomllib.TOMLDecodeError, OSError) as exc:
             errors.append(f"cannot parse {cargo.relative_to(ROOT)}: {exc}")
             continue
-        for section in ("dependencies", "dev-dependencies", "build-dependencies"):
-            for name, value in (data.get(section) or {}).items():
-                version = (
-                    value if isinstance(value, str) else str(value.get("version", ""))
-                )
-                add(found, "cargo", name, version, cargo)
+        cargo_section_names = (
+            "dependencies",
+            "dev-dependencies",
+            "build-dependencies",
+        )
+        for section in cargo_section_names:
+            add_cargo_dependencies(found, errors, data.get(section, {}) or {}, cargo)
+        workspace = data.get("workspace", {}) or {}
+        if isinstance(workspace, dict):
+            add_cargo_dependencies(
+                found, errors, workspace.get("dependencies", {}) or {}, cargo
+            )
+        targets = data.get("target", {}) or {}
+        if isinstance(targets, dict):
+            for target in targets.values():
+                if not isinstance(target, dict):
+                    errors.append(
+                        f"unsupported Cargo target syntax in {cargo.relative_to(ROOT)}: {target!r}"
+                    )
+                    continue
+                for section in cargo_section_names:
+                    add_cargo_dependencies(
+                        found, errors, target.get(section, {}) or {}, cargo
+                    )
 
     for gomod in manifests("go.mod"):
         in_block = False
@@ -271,6 +428,31 @@ def floating(version: str | None) -> bool:
     )
 
 
+def remote_or_mutable(version: str | None) -> bool:
+    if version is None:
+        return False
+    value = version.strip().lower()
+    return "://" in value or value.startswith(
+        (
+            "@ git+",
+            "@ http:",
+            "@ https:",
+            "@ file:",
+            "git+",
+            "git:",
+            "git@",
+            "github:",
+            "gitlab:",
+            "bitbucket:",
+            "http:",
+            "https:",
+            "file:",
+            "link:",
+            "ssh:",
+        )
+    )
+
+
 def main() -> int:
     errors: list[str] = []
     try:
@@ -290,6 +472,10 @@ def main() -> int:
             errors.append(f"denied dependency: {coordinate} ({location})")
         if allow_mode and coordinate not in allow:
             errors.append(f"dependency not on allow-list: {coordinate} ({location})")
+        if remote_or_mutable(version):
+            errors.append(
+                f"remote or mutable source: {coordinate} ({version!r}, {location})"
+            )
         if reject_floating and floating(version):
             errors.append(
                 f"floating or unpinned version: {coordinate} ({version!r}, {location})"
