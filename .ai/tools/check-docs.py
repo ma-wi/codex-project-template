@@ -46,10 +46,10 @@ def markdown_links(path: Path):
 
 
 def require_filled_fields(
-    path: Path, fields: tuple[str, ...], label: str, errors: list[str]
+    path: Path, fields: tuple[str, ...], label: str, messages: list[str]
 ) -> None:
     if not path.is_file():
-        errors.append(f"required {label} file is missing: {path.relative_to(ROOT)}")
+        messages.append(f"required {label} file is missing: {path.relative_to(ROOT)}")
         return
     text = path.read_text(encoding="utf-8")
     for field in fields:
@@ -59,7 +59,7 @@ def require_filled_fields(
             re.MULTILINE,
         )
         if match is None or not match.group(1).strip():
-            errors.append(f"{label} field is incomplete: {field}")
+            messages.append(f"{label} field is incomplete: {field}")
 
 
 def main() -> int:
@@ -76,7 +76,7 @@ def main() -> int:
             ROOT / ".ai/PROJECT_CONTEXT.md",
             REQUIRED_CONTEXT_FIELDS,
             "project context",
-            errors,
+            warnings,
         )
         require_filled_fields(
             ROOT / ".ai/policies/QUALITY_GATES.md",

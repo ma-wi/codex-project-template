@@ -60,14 +60,14 @@ class BootstrapTests(unittest.TestCase):
                         "directory": "frontend",
                         "package_manager": "npm",
                     },
-                    "bash": {"enabled": True},
+                    "bash": {"enabled": False},
                     "dotnet": {
                         "enabled": False,
                         "solution": "",
                         "test_project": "",
                     },
                 },
-                "engineering_knowledge": {"enabled": True},
+                "engineering_knowledge": {"enabled": False},
                 "documentation": {
                     "budgets": {
                         "agents_md_lines": 240,
@@ -107,11 +107,28 @@ class BootstrapTests(unittest.TestCase):
         data["stacks"]["python"]["directory"] = "backend-api"
         with self.assertRaisesRegex(SystemExit, "importable Python package"):
             self.bootstrap.validate_config(data)
+        data["stacks"]["python"]["directory"] = "src/backend"
+        with self.assertRaisesRegex(SystemExit, "top-level importable Python package"):
+            self.bootstrap.validate_config(data)
+
+    def test_python_bootstrap_configures_setuptools_discovery(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            pyproject = Path(temporary) / "pyproject.toml"
+            pyproject.write_text(
+                '[project]\nname = "sample"\nversion = "0.1.0"\n',
+                encoding="utf-8",
+            )
+            self.bootstrap.ensure_setuptools_package_discovery(pyproject, "backend")
+            self.assertIn(
+                '[tool.setuptools.packages.find]\ninclude = ["backend"]',
+                pyproject.read_text(encoding="utf-8"),
+            )
 
     def test_generated_python_gates_target_backend_directory(self) -> None:
         data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
         generated = self.bootstrap.generate_env(data)
         self.assertIn("uv run --locked mypy '\\''backend'\\'' tests", generated)
+        self.assertIn("uv run --locked python -m pytest", generated)
         self.assertNotIn("mypy --exclude '^\\\\.ai/' .", generated)
         self.assertIn("uv run --locked bandit -q -r '\\''backend'\\''", generated)
 
@@ -189,15 +206,45 @@ class BootstrapTests(unittest.TestCase):
             self.assertIn("renders the application shell", smoke_test)
             self.assertIn('import { expect, test } from "vitest"', smoke_test)
 
-    def test_bash_test_gate_fails_when_test_suite_is_absent(self) -> None:
+    def test_bash_test_gate_is_omitted_when_no_project_shell_scripts_exist(
+        self,
+    ) -> None:
+        data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
+        data["stacks"]["python"]["enabled"] = False
+        data["stacks"]["bash"]["enabled"] = True
+        with tempfile.TemporaryDirectory() as temporary:
+            original_root = getattr(self.bootstrap, "ROOT")
+            try:
+                setattr(self.bootstrap, "ROOT", Path(temporary))
+                generated = self.bootstrap.generate_env(data)
+            finally:
+                setattr(self.bootstrap, "ROOT", original_root)
+        self.assertNotIn("bats tests/shell", generated)
+        self.assertIn("REQUIRE_LINT=1", generated)
+        self.assertIn("REQUIRE_TEST=0", generated)
+
+    def test_bash_test_gate_fails_when_scripts_exist_without_suite(self) -> None:
         if os.name == "nt" or not shutil.which("bash"):
             self.skipTest("Generated Bash gate execution runs on the Unix CI job")
         data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
         data["stacks"]["python"]["enabled"] = False
         data["stacks"]["bash"]["enabled"] = True
-        generated = self.bootstrap.generate_env(data)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "scripts").mkdir()
+            (root / "scripts/deploy.sh").write_text(
+                "#!/usr/bin/env bash\nprintf 'deploy\\n'\n",
+                encoding="utf-8",
+            )
+            original_root = getattr(self.bootstrap, "ROOT")
+            try:
+                setattr(self.bootstrap, "ROOT", root)
+                generated = self.bootstrap.generate_env(data)
+            finally:
+                setattr(self.bootstrap, "ROOT", original_root)
         self.assertIn("test -d tests/shell", generated)
         self.assertNotIn("if [ -d tests/shell ]", generated)
+        self.assertIn("Bash scripts were found", generated)
         self.assertIn("REQUIRE_TEST=1", generated)
         with tempfile.TemporaryDirectory() as temporary:
             defaults = Path(temporary) / "defaults.env"
@@ -216,6 +263,7 @@ class BootstrapTests(unittest.TestCase):
                 check=False,
             )
             self.assertNotEqual(0, result.returncode)
+            self.assertIn("tests/shell is missing", result.stderr)
 
     def test_generated_stack_commands_fail_when_required_tools_are_missing(
         self,
@@ -278,7 +326,7 @@ class BootstrapTests(unittest.TestCase):
             fake_uv = fake_bin / "uv"
             fake_uv.write_text(
                 "#!/usr/bin/env bash\n"
-                'if [[ "$*" != "run --locked pytest" ]]; then\n'
+                'if [[ "$*" != "run --locked python -m pytest" ]]; then\n'
                 '  printf "unexpected uv arguments: %s\\n" "$*" >&2\n'
                 "  exit 127\n"
                 "fi\n"
@@ -1483,6 +1531,30 @@ class ConfiguredProjectVerificationTests(unittest.TestCase):
             )
             self.assertNotEqual(0, result.returncode)
             self.assertIn("quality decision field is incomplete", result.stdout)
+
+    def test_incomplete_project_context_warns_without_failing_verification(
+        self,
+    ) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Project verification runs on the Unix CI job")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.make_project(temporary)
+            (root / ".ai/PROJECT_CONTEXT.md").write_text(
+                "# Project context\n\n## Purpose\n\n"
+                "- Product or service:\n"
+                "- Primary users:\n"
+                "- Main outcome:\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                ["bash", os.fspath(root / ".ai/tools/verify.sh")],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertIn("WARN: project context field is incomplete", result.stdout)
 
 
 if __name__ == "__main__":

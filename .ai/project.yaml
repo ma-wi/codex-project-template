@@ -10,14 +10,14 @@ stacks:
     directory: "frontend"
     package_manager: "npm"
   bash:
-    enabled: true
+    enabled: false
   dotnet:
     enabled: false
     solution: ""
     test_project: ""
 
 engineering_knowledge:
-  enabled: true
+  enabled: false
 
 documentation:
   budgets:

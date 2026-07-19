@@ -93,6 +93,8 @@ Bearbeite zuerst `.ai/project.yaml`:
 - bei .NET Solution und explizites Testprojekt eintragen;
 - `engineering_knowledge` nur aktivieren, wenn der MCP wirklich eingerichtet ist.
 
+Aktivierte Stacks erzeugen verpflichtende Gates. Wenn ein Projekt zuerst nur Backend-Code enthält, lasse React und Bash deaktiviert und aktiviere sie später mit einem erneuten Bootstrap.
+
 Alle konfigurierten Pfade müssen unterhalb des Repository-Roots bleiben. Absolute Pfade und `..` werden abgelehnt.
 
 Dann Bootstrap ausführen:
@@ -119,14 +121,17 @@ Diese Datei ist die committed Quelle für lokale Vollverifikation und CI. Sie mu
 
 ## Pflichtfelder nach Bootstrap
 
-Sobald `project.name` nicht mehr `CHANGE_ME` ist, behandelt `./.ai/tools/verify.sh` das Repository als echtes Projekt. Dann scheitert CI absichtlich, solange projektbezogene Pflichtfelder leer sind.
+Sobald `project.name` nicht mehr `CHANGE_ME` ist, behandelt `./.ai/tools/verify.sh` das Repository als echtes Projekt. Harte Projektentscheidungen müssen dann ausgefüllt sein; fachlicher Projektkontext darf anfangs noch fehlen und wird als Warnung gemeldet.
 
 Das ist kein GitHub-Actions-Problem und kein Fehler, weil die Anwendung noch blank ist. Es bedeutet: Die Projektregeln sind noch nicht ausgefüllt.
 
-Vor einem grünen CI-Lauf müssen diese Dateien angepasst werden:
+Vor einem grünen CI-Lauf muss diese Datei angepasst werden:
 
-- `.ai/PROJECT_CONTEXT.md`: mindestens `Product or service`, `Primary users` und `Main outcome` ausfüllen.
 - `.ai/policies/QUALITY_GATES.md`: alle Einträge unter `Required project decisions` ausfüllen.
+
+Diese Datei sollte zeitnah ergänzt werden, blockiert aber nicht hart:
+
+- `.ai/PROJECT_CONTEXT.md`: mindestens `Product or service`, `Primary users` und `Main outcome` ausfüllen, sobald der Agent oder du den Zweck sicher formulieren kann.
 
 Für ein privates Einzelprojekt reichen einfache Regeln. Die Defaults in `.ai/policies/QUALITY_GATES.md` sind bewusst pragmatisch formuliert und können später verschärft werden.
 
@@ -259,9 +264,9 @@ $PROJECT_DIR$/.aiassistant/review/self-review.md
 
 - Python nutzt standardmäßig `backend/` als Quellverzeichnis und `tests/` für Tests.
 - Python nutzt `uv`, Ruff, mypy, pytest, Bandit, pip-audit und build.
-- React nutzt Vite, TypeScript, ESLint, Prettier, Vitest und Testing Library.
+- React nutzt Vite, TypeScript, ESLint, Prettier, Vitest und Testing Library; aktiviere React erst, wenn das Frontend wirklich Teil des Projekts ist.
 - React-Installationen laufen eingefroren: `npm ci`, `pnpm install --frozen-lockfile` oder `yarn install --immutable`.
-- Bash nutzt ShellCheck und Bats, wenn sinnvolle Shell-Tests vorhanden sind.
+- Bash nutzt ShellCheck für vorhandene `*.sh`-Dateien im Projekt. Bats-Tests unter `tests/shell` werden erst verpflichtend, wenn beim Bootstrap eigene Shell-Skripte gefunden werden.
 - .NET nutzt Restore im Lock-Modus, Formatprüfung, Warnings-as-errors, Tests und Vulnerability-Prüfung.
 
 Nicht benötigte Stacks und Regeln kannst du in konkreten Projekten entfernen, um Kontext und Wartungsaufwand zu reduzieren.

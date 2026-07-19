@@ -144,10 +144,15 @@ def validate_repository_path(
 
 def validate_python_package_directory(value: str) -> None:
     path = Path(value.strip())
+    if len(path.parts) != 1:
+        raise SystemExit(
+            "stacks.python.directory must be one top-level importable Python package "
+            f"name, for example 'backend': {value!r}"
+        )
     package_name = path.name
     if not package_name.isidentifier() or package_name.startswith("_"):
         raise SystemExit(
-            "stacks.python.directory must end with an importable Python package "
+            "stacks.python.directory must be one top-level importable Python package "
             f"name, for example 'backend': {value!r}"
         )
 
@@ -158,6 +163,27 @@ def shell_quote(value: str) -> str:
 
 def chain(commands: list[str]) -> str:
     return " && ".join(f"({command})" for command in commands)
+
+
+IGNORED_SCRIPT_DIRS = {
+    ".git",
+    ".ai",
+    ".venv",
+    "venv",
+    "node_modules",
+    "build",
+    "dist",
+    "target",
+}
+
+
+def project_shell_scripts() -> list[Path]:
+    return [
+        path
+        for path in ROOT.rglob("*.sh")
+        if path.is_file()
+        and not any(part in IGNORED_SCRIPT_DIRS for part in path.parts)
+    ]
 
 
 def generate_env(data: dict) -> str:
@@ -181,7 +207,7 @@ def generate_env(data: dict) -> str:
             f"{run} ruff check {target} tests",
             f"{run} mypy {target} tests",
         ]
-        tests += [f"{run} pytest"]
+        tests += [f"{run} python -m pytest"]
         security += [f"{run} bandit -q -r {target}"]
         dependency_scans += [f"{run} pip-audit"]
         build += ["uv build"]
@@ -207,10 +233,14 @@ def generate_env(data: dict) -> str:
         build += [prefix + runner + " build"]
 
     if get(data, "stacks", "bash", "enabled", default=False):
+        shell_script_count = len(project_shell_scripts())
         lint += [
             "find . -type f -name '*.sh' -not -path './.git/*' -not -path './.ai/*' -print0 | xargs -0 -r shellcheck"
         ]
-        tests += ["test -d tests/shell && bats tests/shell"]
+        if shell_script_count:
+            tests += [
+                "test -d tests/shell || { printf 'Bash scripts were found, but tests/shell is missing. Add Bats tests or disable stacks.bash.enabled.\\n' >&2; exit 1; }; bats tests/shell"
+            ]
 
     if get(data, "stacks", "dotnet", "enabled", default=False):
         solution = str(get(data, "stacks", "dotnet", "solution", default="") or ".")
@@ -306,6 +336,20 @@ def npm_package_name(specification: str) -> str:
     return specification.split("@", 1)[0]
 
 
+def ensure_setuptools_package_discovery(pyproject: Path, package_name: str) -> None:
+    text = pyproject.read_text(encoding="utf-8")
+    parsed = tomllib.loads(text)
+    setuptools = parsed.get("tool", {}).get("setuptools", {})
+    if "packages" in setuptools or "py-modules" in setuptools:
+        return
+    pyproject.write_text(
+        text.rstrip()
+        + "\n\n[tool.setuptools.packages.find]\n"
+        + f'include = ["{package_name}"]\n',
+        encoding="utf-8",
+    )
+
+
 def enabled_stack_names(data: dict) -> list[str]:
     stacks = get(data, "stacks", default={})
     if not isinstance(stacks, dict):
@@ -376,6 +420,7 @@ def bootstrap_python(data: dict) -> None:
     tests_dir.mkdir(exist_ok=True)
     smoke_test = tests_dir / "test_backend.py"
     package_name = backend.name
+    ensure_setuptools_package_discovery(pyproject, package_name)
     if not smoke_test.exists():
         smoke_test.write_text(
             f"import {package_name}\n\n\n"
