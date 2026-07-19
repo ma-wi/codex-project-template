@@ -90,8 +90,11 @@ Get-ChildItem -LiteralPath $SourceDirectory -Force | Where-Object {
 
 $CurrentPlan = Join-Path $TargetDirectory ".ai/CURRENT_PLAN.md"
 if ($CommandContext.ShouldProcess($CurrentPlan, "Create idle current-work pointer")) {
-    @("# Current work", "", "No active requirement.") |
-        Set-Content -LiteralPath $CurrentPlan -Encoding utf8
+    # Write bytes explicitly so the pointer is identical to the shell script's
+    # output (LF newlines, no BOM) on every PowerShell edition and platform.
+    [System.IO.File]::WriteAllText(
+        $CurrentPlan, "# Current work`n`nNo active requirement.`n"
+    )
 }
 
 if ($WhatIfPreference) {

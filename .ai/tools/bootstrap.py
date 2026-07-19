@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import ast
+
 import json
 import re
 import shlex
@@ -8,11 +8,25 @@ import shutil
 
 # All subprocess calls use explicit argument arrays and never enable a shell.
 import subprocess  # nosec B404
+import sys
 import tomllib
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _common import get, load_yaml_subset  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / ".ai" / "project.yaml"
+
+# Pinned tool versions. These are intentionally exact for reproducible bootstraps.
+# When updating, bump every copy together and re-run template verification:
+#   - UV_VERSION here and `version:` in .github/workflows/ci.yml
+#   - PYTHON_DEV_DEPENDENCIES here and the pinned ruff/mypy/bandit in
+#     .ai/tools/verify-template.sh
+#   - VITE_VERSION / REACT_QUALITY_DEPENDENCIES here
+#   - runtime pins in .python-version and .node-version
+# Verify each version resolves on its registry before committing the bump.
 UV_VERSION = "0.11.29"
 VITE_VERSION = "9.1.1"
 REACT_TEMPLATE = "react-ts"
@@ -53,56 +67,6 @@ CONFIG_SCHEMA = {
         }
     },
 }
-
-
-def parse_scalar(value: str):
-    value = value.strip()
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
-    if value in {"null", "~"}:
-        return None
-    if value.startswith(("[", "{", "'", '"')):
-        return ast.literal_eval(value)
-    if re.fullmatch(r"-?\d+", value):
-        return int(value)
-    return value
-
-
-def load_yaml_subset(path: Path) -> dict:
-    root: dict = {}
-    stack: list[tuple[int, dict]] = [(-1, root)]
-    lines = path.read_text(encoding="utf-8").splitlines()
-    for number, raw in enumerate(lines, 1):
-        if (
-            not raw.strip()
-            or raw.lstrip().startswith("#")
-            or raw.strip().startswith("- ")
-        ):
-            continue
-        if "\t" in raw or ":" not in raw:
-            raise SystemExit(f"Unsupported YAML at {path}:{number}")
-        indent = len(raw) - len(raw.lstrip(" "))
-        while indent <= stack[-1][0]:
-            stack.pop()
-        parent = stack[-1][1]
-        key, value = raw.strip().split(":", 1)
-        if value.strip():
-            parent[key] = parse_scalar(value)
-        else:
-            parent[key] = {}
-            stack.append((indent, parent[key]))
-    return root
-
-
-def get(data: dict, *keys: str, default=None):
-    current = data
-    for key in keys:
-        if not isinstance(current, dict) or key not in current:
-            return default
-        current = current[key]
-    return current
 
 
 def reject_unknown_keys(data: object, schema: object, path: str = "") -> None:
@@ -492,7 +456,12 @@ def bootstrap_react(data: dict) -> None:
     node_path = shutil.which("node")
     if not node_path:
         raise SystemExit("Node.js is required for the configured React bootstrap")
-    expected_node = (ROOT / ".node-version").read_text(encoding="utf-8").strip()
+    node_version_file = ROOT / ".node-version"
+    if not node_version_file.is_file():
+        raise SystemExit(
+            "React is enabled but .node-version is missing; add it before bootstrap."
+        )
+    expected_node = node_version_file.read_text(encoding="utf-8").strip()
     # node_path is resolved to an executable and no shell is used.
     installed_node = (
         subprocess.run(  # nosec
@@ -550,6 +519,10 @@ def bootstrap_react(data: dict) -> None:
 
 def update_context(data: dict) -> None:
     path = ROOT / ".ai/PROJECT_CONTEXT.md"
+    if not path.is_file():
+        raise SystemExit(
+            "Expected .ai/PROJECT_CONTEXT.md is missing; restore it before bootstrap."
+        )
     text = path.read_text(encoding="utf-8")
     marker = "## Bootstrap configuration"
     name = get(data, "project", "name", default="CHANGE_ME")

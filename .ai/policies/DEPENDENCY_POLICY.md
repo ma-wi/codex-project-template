@@ -65,6 +65,14 @@ For high-assurance projects, set `DEPENDENCY_ALLOWLIST_MODE=1` and populate `.ai
 - Do not use mutable Git branches, unpinned URLs, or wildcard versions for production dependencies.
 - Private registries and mirrors must be explicitly configured and documented.
 
+Reproducibility is guaranteed by the committed lockfile, not by exact manifest
+pins. Version ranges (for example `^1.2` or `>=1.0,<2`) in a manifest are
+accepted as long as the required lockfile is present; the policy only rejects
+genuinely unpinned specifiers (`*`, `latest`, `x`, empty, environment
+interpolation) and remote or mutable sources. Projects that require exact
+manifest pins should enforce that through their own linting in addition to this
+baseline.
+
 ## Tool strategy
 
 Preferred baseline:

@@ -238,6 +238,17 @@ $PROJECT_DIR$/.aiassistant/review/self-review.md
 
 Remove unused stacks and their rules from a concrete project to reduce context and maintenance cost.
 
+## Updating pinned tool versions
+
+Tool versions are pinned exactly for reproducible bootstraps. When bumping them, change every copy together, then run `./.ai/tools/verify-template.sh`:
+
+- `UV_VERSION`, `VITE_VERSION`, `PYTHON_DEV_DEPENDENCIES`, and `REACT_QUALITY_DEPENDENCIES` in `.ai/tools/bootstrap.py`;
+- the `astral-sh/setup-uv` `version:` in `.github/workflows/ci.yml`;
+- the pinned Ruff, mypy, and Bandit versions in `.ai/tools/verify-template.sh`;
+- the runtime pins in `.python-version` and `.node-version`.
+
+Confirm each version resolves on its registry before committing. Bootstrap rejects a mismatched local `uv` or Node.js so generated lockfiles do not depend on an unpinned machine.
+
 ## Template acceptance checklist
 
 - [ ] Project name and enabled stacks are configured.

@@ -34,6 +34,6 @@ fi
 if ((${#scanner_commands[@]} == 0)); then
   run_or_skip "dependency vulnerability/reputation scans" "" "${REQUIRE_DEPENDENCY_SCANNERS:-0}"
 else
-  joined="$(IFS=' && '; echo "${scanner_commands[*]}")"
+  joined="$(join_with_and "${scanner_commands[@]}")"
   run_command "dependency vulnerability/reputation scans" "${joined}"
 fi

@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import ast
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _common import (  # noqa: E402
+    PLAN_POINTER_PHASES,
+    extract_field,
+    get,
+    is_inactive_plan,
+    load_yaml_subset,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / ".ai" / "project.yaml"
@@ -23,55 +32,6 @@ REQUIRED_QUALITY_DECISIONS = (
     "Flaky-test policy",
     "CI required checks",
 )
-
-
-def parse_scalar(value: str):
-    value = value.strip()
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
-    if value in {"null", "~"}:
-        return None
-    if value.startswith(("[", "{", "'", '"')):
-        return ast.literal_eval(value)
-    if re.fullmatch(r"-?\d+", value):
-        return int(value)
-    return value
-
-
-def load_yaml_subset(path: Path) -> dict:
-    root: dict = {}
-    stack: list[tuple[int, dict]] = [(-1, root)]
-    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if (
-            not raw.strip()
-            or raw.lstrip().startswith("#")
-            or raw.strip().startswith("- ")
-        ):
-            continue
-        if "\t" in raw or ":" not in raw:
-            raise ValueError(f"Unsupported YAML at {path}:{number}")
-        indent = len(raw) - len(raw.lstrip(" "))
-        while indent <= stack[-1][0]:
-            stack.pop()
-        parent = stack[-1][1]
-        key, value = raw.strip().split(":", 1)
-        if value.strip():
-            parent[key] = parse_scalar(value)
-        else:
-            parent[key] = {}
-            stack.append((indent, parent[key]))
-    return root
-
-
-def get(data: dict, *keys: str, default=None):
-    current = data
-    for key in keys:
-        if not isinstance(current, dict) or key not in current:
-            return default
-        current = current[key]
-    return current
 
 
 def meaningful_lines(path: Path) -> int:
@@ -211,12 +171,10 @@ def main() -> int:
     current = ROOT / ".ai/CURRENT_PLAN.md"
     if current.exists():
         text = current.read_text(encoding="utf-8")
-        if (
-            "No active requirement." not in text
-            and "Status: idle" not in text
-            and "- Status: idle" not in text
-        ):
-            if "Work directory:" not in text or "Plan:" not in text:
+        if not is_inactive_plan(text):
+            status = extract_field(text, "Status")
+            needs_plan = status in PLAN_POINTER_PHASES
+            if "Work directory:" not in text or (needs_plan and "Plan:" not in text):
                 errors.append(
                     "CURRENT_PLAN.md is active but lacks Work directory or Plan pointer"
                 )

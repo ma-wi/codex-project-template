@@ -3,9 +3,16 @@
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _common import (  # noqa: E402
+    PLAN_POINTER_PHASES,
+    extract_field,
+    is_inactive_plan,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 CURRENT = ROOT / ".ai" / "CURRENT_PLAN.md"
@@ -33,15 +40,6 @@ VALID_PHASES = {
 }
 
 
-def extract_field(text: str, field: str) -> str | None:
-    match = re.search(
-        rf"^-\s*{re.escape(field)}:\s*(.+?)\s*$", text, re.MULTILINE | re.IGNORECASE
-    )
-    if not match:
-        return None
-    return match.group(1).strip().strip("`")
-
-
 def resolve_below(
     value: str, boundary: Path, label: str, errors: list[str]
 ) -> Path | None:
@@ -60,7 +58,7 @@ def main() -> int:
         return 1
 
     current_text = CURRENT.read_text(encoding="utf-8")
-    if "No active requirement." in current_text:
+    if is_inactive_plan(current_text):
         print("PASS: no active temporary work declared.")
         return 0
 
@@ -107,7 +105,8 @@ def main() -> int:
                     )
 
     if not plan_value:
-        errors.append("CURRENT_PLAN.md must contain a 'Plan' field.")
+        if current_status in PLAN_POINTER_PHASES:
+            errors.append("CURRENT_PLAN.md must contain a 'Plan' field.")
     else:
         plan_boundary = work_dir if work_dir is not None else ROOT.resolve()
         plan = resolve_below(plan_value, plan_boundary, "Declared plan", errors)

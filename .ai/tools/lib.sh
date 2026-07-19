@@ -52,6 +52,19 @@ has_command() {
   command -v "$1" >/dev/null 2>&1
 }
 
+# Join the given arguments into a single shell command chained with ' && '.
+# Note: "${array[*]}" with a multi-character IFS only uses IFS's first
+# character as the separator, so it cannot produce ' && '; join explicitly.
+join_with_and() {
+  local result="${1:-}"
+  shift || true
+  local part
+  for part in "$@"; do
+    result+=" && ${part}"
+  done
+  printf '%s' "${result}"
+}
+
 run_command() {
   local label="$1"
   local command_text="$2"
@@ -178,9 +191,7 @@ detect_security() {
   if ((${#commands[@]} == 0)); then
     printf ''
   else
-    local joined
-    joined="$(IFS=' && '; echo "${commands[*]}")"
-    printf '%s' "${joined}"
+    join_with_and "${commands[@]}"
   fi
 }
 

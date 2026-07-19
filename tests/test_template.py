@@ -373,6 +373,7 @@ class BootstrapTests(unittest.TestCase):
             (root / ".ai/tools").mkdir(parents=True)
             (root / ".ai/config").mkdir()
             shutil.copy2(AI_TOOLS / "bootstrap.py", root / ".ai/tools/bootstrap.py")
+            shutil.copy2(AI_TOOLS / "_common.py", root / ".ai/tools/_common.py")
             config = (AI_ROOT / "project.yaml").read_text(encoding="utf-8")
             config = config.replace('name: "CHANGE_ME"', 'name: "sample"', 1)
             config = config.replace(
@@ -418,6 +419,58 @@ class BootstrapTests(unittest.TestCase):
 
 
 class GateTests(unittest.TestCase):
+    def test_join_with_and_chains_commands(self) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Bash gate test runs on the Unix CI job")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".ai/tools").mkdir(parents=True)
+            shutil.copy2(AI_TOOLS / "lib.sh", root / ".ai/tools/lib.sh")
+            result = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    'source .ai/tools/lib.sh; join_with_and "a x" "b" "c"',
+                ],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual("a x && b && c", result.stdout)
+
+    def test_detect_security_joins_multiple_tools_with_and(self) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Bash gate test runs on the Unix CI job")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".ai/tools").mkdir(parents=True)
+            shutil.copy2(AI_TOOLS / "lib.sh", root / ".ai/tools/lib.sh")
+            # Markers plus fake tools so more than one command is detected.
+            (root / "requirements.txt").write_text("", encoding="utf-8")
+            (root / "package.json").write_text("{}\n", encoding="utf-8")
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            for tool in ("gitleaks", "npm", "pip-audit"):
+                executable = fake_bin / tool
+                executable.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+                executable.chmod(0o755)
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:{environment['PATH']}"
+            result = subprocess.run(
+                ["bash", "-c", "source .ai/tools/lib.sh; detect_security"],
+                cwd=root,
+                env=environment,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertIn(" && ", result.stdout)
+            self.assertIn("gitleaks", result.stdout)
+            self.assertIn("pip-audit", result.stdout)
+
     def test_required_missing_command_fails(self) -> None:
         if os.name == "nt" or not shutil.which("bash"):
             self.skipTest("Bash gate test runs on the Unix CI job")
@@ -669,6 +722,16 @@ class CopySafetyTests(unittest.TestCase):
         (source / ".ai/work/template-task/PLAN.md").write_text(
             "template work\n", encoding="utf-8"
         )
+        # Per-project scaffold that must be copied; and a local override that
+        # must never leak into a copied project.
+        (source / ".ai/DECISIONS.md").write_text(
+            "# Operational decisions\n", encoding="utf-8"
+        )
+        (source / ".ai/config").mkdir(parents=True)
+        (source / ".ai/config/project.env").write_text("LOCAL=1\n", encoding="utf-8")
+        (source / ".ai/config/project.env.example").write_text(
+            "# example\n", encoding="utf-8"
+        )
         (source / "config").mkdir()
         (source / "config/app.conf").write_text("project config\n", encoding="utf-8")
         (source / "scripts").mkdir()
@@ -699,6 +762,10 @@ class CopySafetyTests(unittest.TestCase):
         self.assertTrue((target / "config/app.conf").is_file())
         self.assertTrue((target / "scripts/app.sh").is_file())
         self.assertFalse((target / ".ai/work").exists())
+        # Local override excluded; per-project scaffold and example retained.
+        self.assertFalse((target / ".ai/config/project.env").exists())
+        self.assertTrue((target / ".ai/config/project.env.example").is_file())
+        self.assertTrue((target / ".ai/DECISIONS.md").is_file())
         self.assertEqual(
             "# Current work\n\nNo active requirement.\n",
             (target / ".ai/CURRENT_PLAN.md").read_text(encoding="utf-8"),
@@ -740,6 +807,8 @@ class CopySafetyTests(unittest.TestCase):
             "SECURITY.md",
             ".ai/project.yaml",
             ".ai/templates/ADR.md",
+            ".ai/DECISIONS.md",
+            ".ai/tools/_common.py",
             ".github/workflows/ci.yml",
             ".ai/tools/bootstrap.py",
             ".ai/tools/verify.sh",
@@ -904,6 +973,34 @@ class CopySafetyTests(unittest.TestCase):
             self.assertEqual("user data\n", protected.read_text(encoding="utf-8"))
             self.assert_project_copy_boundary(target)
 
+    def test_powershell_current_plan_is_byte_identical_to_shell(self) -> None:
+        if not shutil.which("pwsh"):
+            self.skipTest("PowerShell is not installed")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = self.make_copy_fixture(root)
+            target = root / "target"
+            result = subprocess.run(
+                [
+                    "pwsh",
+                    "-NoProfile",
+                    "-File",
+                    os.fspath(source / ".ai/tools/create-project.ps1"),
+                    "-TargetDirectory",
+                    os.fspath(target),
+                ],
+                cwd=source,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            # Byte comparison catches CRLF/BOM drift that text-mode reads hide.
+            self.assertEqual(
+                b"# Current work\n\nNo active requirement.\n",
+                (target / ".ai/CURRENT_PLAN.md").read_bytes(),
+            )
+
     def test_powershell_exclusions_are_root_aware(self) -> None:
         if not shutil.which("pwsh"):
             self.skipTest("PowerShell is not installed")
@@ -1009,6 +1106,65 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertIn("PASS:", result.stdout)
 
+    def make_lifecycle_repo(self, root: Path) -> None:
+        (root / ".ai/tools").mkdir(parents=True)
+        shutil.copy2(
+            AI_TOOLS / "check-work-state.py",
+            root / ".ai/tools/check-work-state.py",
+        )
+        shutil.copy2(AI_TOOLS / "_common.py", root / ".ai/tools/_common.py")
+
+    def run_work_state(self, root: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, os.fspath(root / ".ai/tools/check-work-state.py")],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def test_idle_status_plan_is_treated_as_inactive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_lifecycle_repo(root)
+            (root / ".ai/CURRENT_PLAN.md").write_text(
+                "# Current work\n\n- Status: idle\n", encoding="utf-8"
+            )
+            result = self.run_work_state(root)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertIn("no active temporary work", result.stdout)
+
+    def test_discovery_phase_without_plan_pointer_is_valid(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_lifecycle_repo(root)
+            (root / ".ai/work/REQ-001").mkdir(parents=True)
+            (root / ".ai/CURRENT_PLAN.md").write_text(
+                "# Current work\n\n"
+                "- Work directory: `.ai/work/REQ-001/`\n"
+                "- Specification: `not-required`\n"
+                "- Status: discovery\n",
+                encoding="utf-8",
+            )
+            result = self.run_work_state(root)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_planning_phase_requires_plan_pointer(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_lifecycle_repo(root)
+            (root / ".ai/work/REQ-001").mkdir(parents=True)
+            (root / ".ai/CURRENT_PLAN.md").write_text(
+                "# Current work\n\n"
+                "- Work directory: `.ai/work/REQ-001/`\n"
+                "- Specification: `not-required`\n"
+                "- Status: planning\n",
+                encoding="utf-8",
+            )
+            result = self.run_work_state(root)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("must contain a 'Plan' field", result.stdout)
+
     def test_significant_lifecycle_uses_durable_ready_specification(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1017,6 +1173,7 @@ class LifecycleTests(unittest.TestCase):
                 AI_TOOLS / "check-work-state.py",
                 root / ".ai/tools/check-work-state.py",
             )
+            shutil.copy2(AI_TOOLS / "_common.py", root / ".ai/tools/_common.py")
             work = root / ".ai/work/REQ-001/tasks"
             work.mkdir(parents=True)
             specs = root / "docs/specifications"
@@ -1059,6 +1216,7 @@ class LifecycleTests(unittest.TestCase):
                 AI_TOOLS / "check-work-state.py",
                 root / ".ai/tools/check-work-state.py",
             )
+            shutil.copy2(AI_TOOLS / "_common.py", root / ".ai/tools/_common.py")
             escaped = root / ".ai/escaped"
             escaped.mkdir(parents=True)
             (escaped / "PLAN.md").write_text(
@@ -1090,6 +1248,7 @@ class LifecycleTests(unittest.TestCase):
                 AI_TOOLS / "check-work-state.py",
                 root / ".ai/tools/check-work-state.py",
             )
+            shutil.copy2(AI_TOOLS / "_common.py", root / ".ai/tools/_common.py")
             work = root / ".ai/work/REQ-001"
             work.mkdir(parents=True)
             (work / "PLAN.md").write_text(

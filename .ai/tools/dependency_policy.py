@@ -417,6 +417,12 @@ def check_lockfiles(errors: list[str]) -> None:
 
 
 def floating(version: str | None) -> bool:
+    # Reproducibility in this template comes from mandatory, committed lockfiles
+    # (REQUIRE_LOCKFILES), not from exact manifest pins. Version ranges such as
+    # "^1.2" or ">=1.0,<2" are therefore accepted; only genuinely unpinned or
+    # unresolvable specifiers (``*``/``latest``/``x``/empty, remote URLs, or
+    # environment-variable interpolation) are rejected here. Remote/mutable
+    # sources are handled separately by ``remote_or_mutable``.
     if version is None:
         return True
     value = version.strip().lower()
