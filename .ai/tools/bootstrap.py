@@ -563,6 +563,20 @@ def update_next_steps() -> None:
     )
 
 
+def create_decisions_scaffold() -> None:
+    path = ROOT / ".ai/DECISIONS.md"
+    if path.exists():
+        return
+    path.write_text(
+        "# Operational decisions\n\n"
+        "Use this file only for small current operating decisions that do not justify an ADR. "
+        "Remove decisions that no longer apply.\n\n"
+        "| Date | Decision | Rationale | Scope/source |\n"
+        "|---|---|---|---|\n",
+        encoding="utf-8",
+    )
+
+
 def create_project_readme(data: dict) -> None:
     path = ROOT / "README.md"
     if path.exists():
@@ -631,6 +645,7 @@ def main() -> None:
     )
     update_context(data)
     update_next_steps()
+    create_decisions_scaffold()
     create_idea()
     for path in (ROOT / ".ai/tools").glob("*.sh"):
         path.chmod(path.stat().st_mode | 0o111)
@@ -639,6 +654,7 @@ def main() -> None:
     print("[bootstrap] Generated versioned .ai/config/project.defaults.env")
     print("[bootstrap] Updated .ai/PROJECT_CONTEXT.md")
     print("[bootstrap] Updated project-readiness next steps")
+    print("[bootstrap] Created .ai/DECISIONS.md when missing")
     print("[bootstrap] Created .idea/vcs.xml")
     print("[bootstrap] AI rules are ready under .aiassistant/rules/")
     print("[bootstrap] One manual IntelliJ setting remains:")

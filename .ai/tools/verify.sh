@@ -30,6 +30,7 @@ run_gate() {
 
 run_gate "work-state" "${SCRIPT_DIR}/check-work-state.py"
 run_gate "documentation" "${SCRIPT_DIR}/check-docs.py"
+run_gate "setup" "${SCRIPT_DIR}/ci-setup.sh"
 run_gate "format" "${SCRIPT_DIR}/format.sh" --check
 run_gate "lint" "${SCRIPT_DIR}/lint.sh"
 run_gate "tests" "${SCRIPT_DIR}/test.sh"

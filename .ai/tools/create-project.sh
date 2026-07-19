@@ -64,13 +64,14 @@ root_files=(
   'docs/specifications/REQ-ai-control-plane-layout.md'
   'docs/requirements/REQ-template-hardening.md'
   'docs/specifications/REQ-template-hardening.md'
-  '.ai/CURRENT_PLAN.md'
+  '.ai/CURRENT_PLAN.md' '.ai/DECISIONS.md'
   '.ai/tools/create-project.sh' '.ai/tools/create-project.ps1'
   '.ai/tools/verify-template.sh' '.ai/config/project.env'
 )
 root_directories=('tests' '.ai/work')
 state_directories=(
-  '.git' '.idea' '.venv' 'venv' 'node_modules' '__pycache__'
+  '.git' '.idea' '.vscode' '.cursor' '.claude' '.codex'
+  '.venv' 'venv' 'node_modules' '__pycache__'
   '.pytest_cache' '.mypy_cache' '.ruff_cache' 'coverage'
   'build' 'dist' 'target'
 )

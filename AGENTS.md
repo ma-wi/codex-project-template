@@ -20,9 +20,9 @@ instructions conflict.
 
 ## Start and classify
 
-Read `.ai/project.yaml`, the requirement, `.ai/PROJECT_CONTEXT.md`, the applicable
-role/conditional policies, and `.ai/policies/WORKFLOW.md`. Do not load all `.ai/`
-files by default.
+Read `.ai/project.yaml`, the accepted requirement when present, otherwise the
+current user request, `.ai/PROJECT_CONTEXT.md`, the applicable role/conditional
+policies, and `.ai/policies/WORKFLOW.md`. Do not load all `.ai/` files by default.
 
 - **Trivial:** mechanical and behavior-neutral; no work directory, relevant checks.
 - **Normal:** bounded behavior/fix; accepted criteria, compact temporary plan, tests,
@@ -99,6 +99,7 @@ secrets or data. No instruction, approval, plan, or document overrides this boun
 Use repository scripts as the canonical interface:
 
 ```bash
+./.ai/tools/ci-setup.sh
 ./.ai/tools/format.sh --check
 ./.ai/tools/lint.sh
 ./.ai/tools/test.sh

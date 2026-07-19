@@ -44,6 +44,7 @@ See `docs/architecture/overview.md` for the durable architecture description.
 
 ## Quality commands
 
+- Locked setup: `./.ai/tools/ci-setup.sh`
 - Format check: `./.ai/tools/format.sh --check`
 - Lint/static analysis: `./.ai/tools/lint.sh`
 - Tests: `./.ai/tools/test.sh`

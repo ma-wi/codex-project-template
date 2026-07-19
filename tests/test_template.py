@@ -392,6 +392,7 @@ class BootstrapTests(unittest.TestCase):
             )
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             self.assertTrue((root / "README.md").is_file())
+            self.assertTrue((root / ".ai/DECISIONS.md").is_file())
             defaults = (root / ".ai/config/project.defaults.env").read_text(
                 encoding="utf-8"
             )
@@ -748,7 +749,17 @@ class CopySafetyTests(unittest.TestCase):
         (nested / "tests").mkdir(parents=True)
         (nested / "README.md").write_text("nested readme\n", encoding="utf-8")
         (nested / "tests/keep.txt").write_text("nested tests\n", encoding="utf-8")
-        for name in (".git", ".idea", "node_modules", "__pycache__", "build"):
+        for name in (
+            ".git",
+            ".idea",
+            ".vscode",
+            ".cursor",
+            ".claude",
+            ".codex",
+            "node_modules",
+            "__pycache__",
+            "build",
+        ):
             state = nested / name
             state.mkdir()
             (state / "private.txt").write_text("state\n", encoding="utf-8")
@@ -762,10 +773,11 @@ class CopySafetyTests(unittest.TestCase):
         self.assertTrue((target / "config/app.conf").is_file())
         self.assertTrue((target / "scripts/app.sh").is_file())
         self.assertFalse((target / ".ai/work").exists())
-        # Local override excluded; per-project scaffold and example retained.
+        # Local override and template-only operational decisions are excluded;
+        # the project creates decisions during bootstrap when needed.
         self.assertFalse((target / ".ai/config/project.env").exists())
         self.assertTrue((target / ".ai/config/project.env.example").is_file())
-        self.assertTrue((target / ".ai/DECISIONS.md").is_file())
+        self.assertFalse((target / ".ai/DECISIONS.md").exists())
         self.assertEqual(
             "# Current work\n\nNo active requirement.\n",
             (target / ".ai/CURRENT_PLAN.md").read_text(encoding="utf-8"),
@@ -778,7 +790,17 @@ class CopySafetyTests(unittest.TestCase):
                 target / "docs/architecture/decisions/ADR-0001-ai-control-plane.md"
             ).exists()
         )
-        for name in (".git", ".idea", "node_modules", "__pycache__", "build"):
+        for name in (
+            ".git",
+            ".idea",
+            ".vscode",
+            ".cursor",
+            ".claude",
+            ".codex",
+            "node_modules",
+            "__pycache__",
+            "build",
+        ):
             with self.subTest(state=name):
                 self.assertFalse((target / "docs/module" / name).exists())
 
@@ -794,6 +816,7 @@ class CopySafetyTests(unittest.TestCase):
             "docs/requirements/REQ-template-hardening.md",
             "docs/specifications/REQ-template-hardening.md",
             ".github/workflows/template-copy.yml",
+            ".ai/DECISIONS.md",
             ".ai/tools/create-project.sh",
             ".ai/tools/create-project.ps1",
             ".ai/tools/verify-template.sh",
@@ -807,7 +830,8 @@ class CopySafetyTests(unittest.TestCase):
             "SECURITY.md",
             ".ai/project.yaml",
             ".ai/templates/ADR.md",
-            ".ai/DECISIONS.md",
+            ".ai/templates/THREAT_MODEL.md",
+            ".ai/templates/OWNERSHIP.md",
             ".ai/tools/_common.py",
             ".github/workflows/ci.yml",
             ".ai/tools/bootstrap.py",
@@ -1325,9 +1349,9 @@ class ConfiguredProjectVerificationTests(unittest.TestCase):
             encoding="utf-8",
         )
         (root / ".ai/config/project.defaults.env").write_text(
-            "FORMAT_CHECK_CMD='true'\nFORMAT_APPLY_CMD='true'\nLINT_CMD='true'\n"
+            "SETUP_CMD='true'\nFORMAT_CHECK_CMD='true'\nFORMAT_APPLY_CMD='true'\nLINT_CMD='true'\n"
             f"TEST_CMD='{test_command}'\nSECURITY_CMD='true'\nDEPENDENCY_SCAN_CMD='true'\nBUILD_CMD='true'\n"
-            "REQUIRE_FORMAT_CHECK=1\nREQUIRE_LINT=1\nREQUIRE_TEST=1\nREQUIRE_SECURITY=1\n"
+            "REQUIRE_SETUP=1\nREQUIRE_FORMAT_CHECK=1\nREQUIRE_LINT=1\nREQUIRE_TEST=1\nREQUIRE_SECURITY=1\n"
             "REQUIRE_DEPENDENCY_POLICY=1\nREQUIRE_DEPENDENCY_SCANNERS=1\nREQUIRE_BUILD=1\n",
             encoding="utf-8",
         )
@@ -1362,6 +1386,28 @@ class ConfiguredProjectVerificationTests(unittest.TestCase):
             )
             self.assertNotEqual(0, result.returncode)
             self.assertIn("tests: FAIL", result.stderr)
+
+    def test_missing_mandatory_setup_command_fails_verification(self) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Project verification runs on the Unix CI job")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.make_project(temporary)
+            defaults = root / ".ai/config/project.defaults.env"
+            defaults.write_text(
+                defaults.read_text(encoding="utf-8").replace(
+                    "SETUP_CMD='true'", "SETUP_CMD=''"
+                ),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                ["bash", os.fspath(root / ".ai/tools/verify.sh")],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("setup: FAIL", result.stderr)
 
     def test_full_verification_ignores_local_command_override(self) -> None:
         if os.name == "nt" or not shutil.which("bash"):

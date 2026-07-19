@@ -8,6 +8,12 @@
 .idea/workspace.xml
 .idea/shelf/
 
+# Other local IDE/agent state.
+.vscode/
+.cursor/
+.claude/
+.codex/
+
 # Common secrets and local environments
 .env
 .env.*

@@ -14,7 +14,7 @@ accepted requirement → planner → implementer → independent reviewer
 
 ## Create a project
 
-Do not copy the template's `.git`, `.idea`, local environments, caches, or this setup README. Preview first.
+Do not copy the template's `.git`, IDE/agent state, local environments, caches, or this setup README. Preview first.
 
 ### Linux, macOS, Git Bash, or WSL
 
@@ -41,7 +41,7 @@ The copy contains reusable project rules, security policy, configuration, projec
 - this template repository's own hardening/control-plane requirements, specifications, and ADR;
 - the project-copy scripts and `.ai/tools/verify-template.sh`;
 - the template-only Windows copy-test workflow;
-- Git/IDE state, local environments, caches, coverage, and build outputs.
+- Git/IDE/agent state, local environments, caches, coverage, and build outputs.
 
 Bootstrap creates the new project README. Create the project changelog and contributing guide only when their actual policies and release process are known. `SECURITY.md` remains as a required project policy scaffold and must be completed with the real private reporting channel.
 
@@ -109,7 +109,7 @@ Recommended repository settings:
 - use environment protection and OIDC rather than long-lived deployment secrets when deployment is later added.
 
 The included workflow uses least-privilege read permissions, pinned action commits,
-versioned runner labels, concurrency cancellation, and timeouts.
+versioned runner labels, concurrency cancellation, timeouts, and `./.ai/tools/verify.sh`.
 
 ## Initial product planning
 
@@ -123,38 +123,14 @@ Then start a fresh planning agent. The planner performs discovery when material 
 
 Accept the specification and architecture decisions before starting the implementation agent.
 
-## Three agent prompts
+## Agent roles
 
-### Planner
+Use fresh contexts for the three standard roles. Point each agent at `AGENTS.md`,
+`.ai/project.yaml`, its role file, and the accepted requirement or active plan:
 
-```text
-Act as the planner. Read AGENTS.md, .ai/project.yaml,
-.ai/roles/planner.md, the requirement, relevant project context,
-ADRs, code, and tests. Classify the change. Resolve material ambiguity,
-create or update the durable specification and proposed ADRs, then create
-a compact implementation plan and independently implementable ready tasks.
-Do not implement production code.
-```
-
-### Implementer
-
-```text
-Act as the implementer. Read AGENTS.md, .ai/roles/implementer.md,
-.ai/CURRENT_PLAN.md, the accepted requirement/specification/ADRs, plan, and
-assigned ready tasks. Implement only accepted scope with tests. Run focused
-checks and ./.ai/tools/verify.sh. Do not mark work reviewed. After independent
-approval, perform only assigned mechanical closeout; material changes return to review.
-```
-
-### Independent reviewer
-
-```text
-Act as an independent reviewer in a fresh context. Read AGENTS.md,
-.ai/roles/code-reviewer.md, the requirement/specification/ADRs, plan,
-complete diff, tests, and verification evidence. Trace acceptance criteria,
-apply relevant review lenses, run appropriate checks, and report prioritized
-evidence-based findings. Do not implement unless explicitly reassigned.
-```
+- Planner: `.ai/roles/planner.md`
+- Implementer: `.ai/roles/implementer.md`
+- Independent reviewer: `.ai/roles/code-reviewer.md`
 
 Return findings to the implementation agent. `P0` and `P1` remediations require a fresh reviewer pass.
 
@@ -191,7 +167,6 @@ Keep temporary files through independent review. During closeout, first transfer
 For a configured project:
 
 ```bash
-./.ai/tools/ci-setup.sh       # CI-style locked dependency installation
 ./.ai/tools/format.sh --check
 ./.ai/tools/lint.sh
 ./.ai/tools/test.sh
@@ -201,8 +176,9 @@ For a configured project:
 ./.ai/tools/verify.sh
 ```
 
-Mandatory gates fail when their command is absent or skipped. `verify.sh` ignores
-machine-local overrides and does not treat a mandatory skip as success.
+`verify.sh` also runs `./.ai/tools/ci-setup.sh` for configured projects, then every
+mandatory gate. It ignores machine-local overrides and does not treat a mandatory
+skip as success.
 
 Before configuration, `verify.sh` recognizes `project.name: "CHANGE_ME"` and validates the template itself: documentation, shell/Python syntax, copy safety, dependency policy, bootstrap generation, and lifecycle state checks.
 
@@ -219,7 +195,7 @@ Use locked/frozen installs in CI. Pin CI actions to reviewed commit SHAs. Option
 1. Open the new project directory.
 2. Confirm the agent can read the root `AGENTS.md`.
 3. Keep command approval and sandbox settings restrictive.
-4. Configure JetBrains Project Rules from `.aiassistant/rules/` as desired.
+4. Configure JetBrains Project Rules from `.aiassistant/rules/` only when the IDE does not already load `AGENTS.md`.
 5. Set the AI Self-Review rules path to:
 
 ```text
@@ -237,6 +213,13 @@ $PROJECT_DIR$/.aiassistant/review/self-review.md
 - .NET uses restore lock mode, format verification, warning-as-error builds, tests, and vulnerable-package inspection. PSScriptAnalyzer and Pester checks are added automatically when project PowerShell files are present during bootstrap.
 
 Remove unused stacks and their rules from a concrete project to reduce context and maintenance cost.
+
+## Optional governance templates
+
+- Use `.ai/templates/THREAT_MODEL.md` for public APIs, sensitive data, identity,
+  file parsing, networks, irreversible migrations, or other security-relevant work.
+- Use `.ai/templates/OWNERSHIP.md` to record decision owners, review owners, and
+  branch-protection expectations before complex implementation begins.
 
 ## Updating pinned tool versions
 
@@ -257,6 +240,8 @@ Confirm each version resolves on its registry before committing. Bootstrap rejec
 - [ ] `.ai/config/project.defaults.env`, manifests, and lockfiles are committed.
 - [ ] `./.ai/tools/verify.sh` executes every mandatory project gate.
 - [ ] GitHub branch protection requires CI.
+- [ ] Review/decision ownership is documented for complex or sensitive projects.
+- [ ] Threat model is completed when the project has a security-relevant surface.
 - [ ] Initial requirement is accepted.
 - [ ] Durable specification and architecture decisions are accepted.
 - [ ] A fresh planning-to-review lifecycle has been exercised once.

@@ -60,8 +60,9 @@ pass mark `verified`.
 
 ## 5. Full verification
 
-Run `./.ai/tools/verify.sh`. Every configured mandatory gate must execute and pass;
-a mandatory skip fails. Record exact commands/results and environment limitations.
+Run `./.ai/tools/verify.sh`. It runs locked setup for configured projects, then every
+configured mandatory gate. Every mandatory gate must execute and pass; a mandatory
+skip fails. Record exact commands/results and environment limitations.
 
 ## 6. Independent review and remediation
 

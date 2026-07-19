@@ -39,13 +39,5 @@ jobs:
           version: "0.11.29"
           enable-cache: true
 
-      - name: Install locked project dependencies
-        run: |
-          if grep -qE "^[[:space:]]*name:[[:space:]]*['\"]?CHANGE_ME['\"]?[[:space:]]*$" .ai/project.yaml; then
-            echo "Template state: project dependency setup is intentionally not run."
-          else
-            ./.ai/tools/ci-setup.sh
-          fi
-
       - name: Verify template or configured project
         run: ./.ai/tools/verify.sh

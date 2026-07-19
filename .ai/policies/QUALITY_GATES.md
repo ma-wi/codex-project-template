@@ -6,6 +6,7 @@ verification can pass.
 
 | Gate | Policy | Canonical command | Notes |
 |---|---|---|---|
+| Locked setup | Required when dependencies or generated tool defaults require installation | `./.ai/tools/ci-setup.sh` through `./.ai/tools/verify.sh` | Uses committed setup command |
 | Formatting | Required when the enabled stack has a formatter | `./.ai/tools/format.sh --check` | No formatting drift |
 | Linting | Required for every enabled code stack | `./.ai/tools/lint.sh` | Include static analysis where applicable |
 | Static typing | Conditional | Included in lint/build | Required for typed projects |
@@ -23,7 +24,7 @@ verification can pass.
 
 ## Gate execution policy
 
-During implementation, run the smallest relevant checks. Before completion, run all configured mandatory gates through `./.ai/tools/verify.sh`.
+During implementation, run the smallest relevant checks. Before completion, run all configured mandatory gates through `./.ai/tools/verify.sh`, including locked setup for configured projects.
 
 A non-mandatory gate may be skipped only when:
 
