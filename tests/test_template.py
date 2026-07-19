@@ -141,6 +141,24 @@ class BootstrapTests(unittest.TestCase):
         data["stacks"]["react"]["package_manager"] = "yarn"
         self.assertIn("yarn install --immutable", self.bootstrap.generate_env(data))
 
+    def test_react_quality_setup_pins_project_package_manager(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            frontend = Path(temporary)
+            (frontend / "src").mkdir()
+            (frontend / "package.json").write_text("{}\n", encoding="utf-8")
+
+            self.bootstrap.configure_react_quality(frontend, "pnpm")
+            data = json.loads((frontend / "package.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                f"pnpm@{self.bootstrap.PNPM_VERSION}", data["packageManager"]
+            )
+
+            self.bootstrap.configure_react_quality(frontend, "yarn")
+            data = json.loads((frontend / "package.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                f"yarn@{self.bootstrap.YARN_VERSION}", data["packageManager"]
+            )
+
     def test_react_creator_is_explicitly_versioned(self) -> None:
         command, _, _ = self.bootstrap.package_manager_commands(
             "npm", "frontend", "react-ts", "9.1.1"
@@ -729,6 +747,7 @@ class CopySafetyTests(unittest.TestCase):
             "# Operational decisions\n", encoding="utf-8"
         )
         (source / ".ai/config").mkdir(parents=True)
+        shutil.copy2(AI_CONFIG / "copy-exclude.txt", source / ".ai/config")
         (source / ".ai/config/project.env").write_text("LOCAL=1\n", encoding="utf-8")
         (source / ".ai/config/project.env.example").write_text(
             "# example\n", encoding="utf-8"
@@ -820,6 +839,7 @@ class CopySafetyTests(unittest.TestCase):
             ".ai/tools/create-project.sh",
             ".ai/tools/create-project.ps1",
             ".ai/tools/verify-template.sh",
+            ".ai/config/copy-exclude.txt",
         )
         for relative in excluded:
             with self.subTest(relative=relative):

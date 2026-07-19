@@ -24,11 +24,14 @@ CONFIG = ROOT / ".ai" / "project.yaml"
 #   - UV_VERSION here and `version:` in .github/workflows/ci.yml
 #   - PYTHON_DEV_DEPENDENCIES here and the pinned ruff/mypy/bandit in
 #     .ai/tools/verify-template.sh
-#   - VITE_VERSION / REACT_QUALITY_DEPENDENCIES here
+#   - VITE_VERSION / PNPM_VERSION / YARN_VERSION /
+#     REACT_QUALITY_DEPENDENCIES here
 #   - runtime pins in .python-version and .node-version
 # Verify each version resolves on its registry before committing the bump.
 UV_VERSION = "0.11.29"
 VITE_VERSION = "9.1.1"
+PNPM_VERSION = "11.15.0"
+YARN_VERSION = "4.17.1"
 REACT_TEMPLATE = "react-ts"
 SELF_REVIEW_RULES = ".aiassistant/review/self-review.md"
 PYTHON_DEV_DEPENDENCIES = (
@@ -387,11 +390,15 @@ def package_manager_commands(
     )
 
 
-def configure_react_quality(frontend: Path) -> None:
+def configure_react_quality(frontend: Path, manager: str = "npm") -> None:
     package_json = frontend / "package.json"
     if not package_json.exists():
         raise SystemExit(f"React bootstrap did not create {package_json}")
     data = json.loads(package_json.read_text(encoding="utf-8"))
+    if manager == "pnpm":
+        data["packageManager"] = f"pnpm@{PNPM_VERSION}"
+    elif manager == "yarn":
+        data["packageManager"] = f"yarn@{YARN_VERSION}"
     scripts = data.setdefault("scripts", {})
     scripts.update(
         {
@@ -507,7 +514,7 @@ def bootstrap_react(data: dict) -> None:
     ]
     if missing:
         run_command([*add_dev_cmd, *missing], frontend)
-    configure_react_quality(frontend)
+    configure_react_quality(frontend, manager)
     if created_frontend:
         format_command = {
             "npm": ["npm", "run", "format"],

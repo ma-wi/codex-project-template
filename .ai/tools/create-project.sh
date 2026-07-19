@@ -36,6 +36,7 @@ if ((${#args[@]} != 1)); then
 fi
 
 source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+exclude_manifest="${source_dir}/.ai/config/copy-exclude.txt"
 if command -v python3 >/dev/null 2>&1; then
   target_dir="$(python3 -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve())' "${args[0]}")"
 elif command -v python >/dev/null 2>&1; then
@@ -57,41 +58,46 @@ if ((dry_run == 0)); then
   mkdir -p "$target_dir"
 fi
 
-root_files=(
-  'README.md' 'CHANGELOG.md' 'CONTRIBUTING.md'
-  '.github/workflows/template-copy.yml'
-  'docs/architecture/decisions/ADR-0001-ai-control-plane.md'
-  'docs/specifications/REQ-ai-control-plane-layout.md'
-  'docs/requirements/REQ-template-hardening.md'
-  'docs/specifications/REQ-template-hardening.md'
-  '.ai/CURRENT_PLAN.md' '.ai/DECISIONS.md'
-  '.ai/tools/create-project.sh' '.ai/tools/create-project.ps1'
-  '.ai/tools/verify-template.sh' '.ai/config/project.env'
-)
-root_directories=('tests' '.ai/work')
-state_directories=(
-  '.git' '.idea' '.vscode' '.cursor' '.claude' '.codex'
-  '.venv' 'venv' 'node_modules' '__pycache__'
-  '.pytest_cache' '.mypy_cache' '.ruff_cache' 'coverage'
-  'build' 'dist' 'target'
-)
-state_file_patterns=('*.pyc' '*.pyo' '*.zip')
+read_manifest_section() {
+  local section="$1"
+  local active=0
+  local line trimmed
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    trimmed="${line#"${line%%[![:space:]]*}"}"
+    trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+    [[ -z "${trimmed}" || "${trimmed}" == \#* ]] && continue
+    if [[ "${trimmed}" == \[*] ]]; then
+      [[ "${trimmed}" == "[${section}]" ]] && active=1 || active=0
+      continue
+    fi
+    ((active)) && printf '%s\n' "${trimmed}"
+  done < "${exclude_manifest}"
+}
+
+if [[ ! -f "${exclude_manifest}" ]]; then
+  printf 'Copy exclude manifest is missing: %s\n' "${exclude_manifest}" >&2
+  exit 2
+fi
+mapfile -t excluded_paths < <(read_manifest_section relative_paths)
+mapfile -t root_directories < <(read_manifest_section root_directories)
+mapfile -t state_names < <(read_manifest_section state_names)
+mapfile -t state_file_extensions < <(read_manifest_section state_file_extensions)
 
 printf '[create-project] Source: %s\n[create-project] Target: %s\n' "$source_dir" "$target_dir"
 if command -v rsync >/dev/null 2>&1; then
   command=(rsync -a --itemize-changes)
   ((dry_run)) && command+=(--dry-run)
-  for path in "${root_files[@]}"; do
+  for path in "${excluded_paths[@]}"; do
     command+=(--exclude="/$path")
   done
   for path in "${root_directories[@]}"; do
     command+=(--exclude="/$path/")
   done
-  for name in "${state_directories[@]}"; do
+  for name in "${state_names[@]}"; do
     command+=(--exclude="$name/")
   done
-  for pattern in "${state_file_patterns[@]}"; do
-    command+=(--exclude="$pattern")
+  for extension in "${state_file_extensions[@]}"; do
+    command+=(--exclude="*${extension}")
   done
   command+=("$source_dir/" "$target_dir/")
   "${command[@]}"
@@ -101,20 +107,20 @@ else
     exit 2
   fi
   tar_excludes=()
-  for path in "${root_files[@]}"; do
+  for path in "${excluded_paths[@]}"; do
     tar_excludes+=("--exclude=./$path")
   done
   for path in "${root_directories[@]}"; do
     tar_excludes+=("--exclude=./$path")
   done
-  for name in "${state_directories[@]}"; do
+  for name in "${state_names[@]}"; do
     tar_excludes+=(
       "--exclude=./$name" "--exclude=./$name/*"
       "--exclude=*/$name" "--exclude=*/$name/*"
     )
   done
-  for pattern in "${state_file_patterns[@]}"; do
-    tar_excludes+=("--exclude=$pattern")
+  for extension in "${state_file_extensions[@]}"; do
+    tar_excludes+=("--exclude=*${extension}")
   done
   (cd "$source_dir" && tar "${tar_excludes[@]}" -cf - .) | (cd "$target_dir" && tar -xf -)
 fi

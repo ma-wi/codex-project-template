@@ -40,6 +40,7 @@ The copy contains reusable project rules, security policy, configuration, projec
 - `tests/` and temporary `.ai/work/` artifacts;
 - this template repository's own hardening/control-plane requirements, specifications, and ADR;
 - the project-copy scripts and `.ai/tools/verify-template.sh`;
+- `.ai/config/copy-exclude.txt`, the template-maintenance manifest for copy boundaries;
 - the template-only Windows copy-test workflow;
 - Git/IDE/agent state, local environments, caches, coverage, and build outputs.
 
@@ -68,7 +69,7 @@ Run:
 ./.ai/tools/bootstrap.sh
 ```
 
-Install the template's pinned uv version shown in `.github/workflows/ci.yml` when Python is enabled and the Node.js version from `.node-version` when React is enabled. Bootstrap rejects different versions so generated manifests and lockfiles do not depend silently on the developer machine.
+Install the template's pinned uv version shown in `.github/workflows/ci.yml` when Python is enabled and the Node.js version from `.node-version` when React is enabled. Bootstrap rejects different versions so generated manifests and lockfiles do not depend silently on the developer machine. For React projects using pnpm or Yarn, bootstrap writes matching `packageManager` metadata so frozen installs use the intended tool family.
 
 Or on Windows without Bash:
 
@@ -216,7 +217,7 @@ $PROJECT_DIR$/.aiassistant/review/self-review.md
 
 - Python uses the pinned `uv` bootstrap, a project-local environment, Ruff, mypy, pytest, Bandit, pip-audit, and build.
 - React uses a pinned Vite creator, TypeScript, ESLint, Prettier, Vitest, Testing Library, locked package installation, type checking, and accessibility-focused review.
-- React uses fixed frozen installation commands: `npm ci`, `pnpm install --frozen-lockfile`, or `yarn install --immutable`. Pin pnpm or Yarn through the project's `packageManager` metadata.
+- React uses fixed frozen installation commands: `npm ci`, `pnpm install --frozen-lockfile`, or `yarn install --immutable`. Bootstrap writes the pnpm/Yarn `packageManager` metadata for React projects that use those managers.
 - Bash requires ShellCheck and uses Bats when meaningful shell tests exist.
 - .NET uses restore lock mode, format verification, warning-as-error builds, tests, and vulnerable-package inspection. PSScriptAnalyzer and Pester checks are added automatically when project PowerShell files are present during bootstrap.
 
@@ -233,7 +234,7 @@ Remove unused stacks and their rules from a concrete project to reduce context a
 
 Tool versions are pinned exactly for reproducible bootstraps. When bumping them, change every copy together, then run `./.ai/tools/verify-template.sh`:
 
-- `UV_VERSION`, `VITE_VERSION`, `PYTHON_DEV_DEPENDENCIES`, and `REACT_QUALITY_DEPENDENCIES` in `.ai/tools/bootstrap.py`;
+- `UV_VERSION`, `VITE_VERSION`, `PNPM_VERSION`, `YARN_VERSION`, `PYTHON_DEV_DEPENDENCIES`, and `REACT_QUALITY_DEPENDENCIES` in `.ai/tools/bootstrap.py`;
 - the `astral-sh/setup-uv` `version:` in `.github/workflows/ci.yml`;
 - the pinned Ruff, mypy, and Bandit versions in `.ai/tools/verify-template.sh`;
 - the runtime pins in `.python-version` and `.node-version`.

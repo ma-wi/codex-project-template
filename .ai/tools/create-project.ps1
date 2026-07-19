@@ -29,29 +29,37 @@ if ($existing -and -not $Force) {
     throw "Target directory is not empty: $TargetDirectory. Use -Force only for an intentional merge."
 }
 
-$excludedTopLevel = @(
-    ".git", ".idea", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "tests"
-)
-$excludedRelativePaths = @(
-    ".ai/work",
-    ".ai/CURRENT_PLAN.md",
-    "docs/architecture/decisions/ADR-0001-ai-control-plane.md",
-    "docs/specifications/REQ-ai-control-plane-layout.md",
-    "docs/requirements/REQ-template-hardening.md",
-    "docs/specifications/REQ-template-hardening.md",
-    ".github/workflows/template-copy.yml",
-    ".ai/DECISIONS.md",
-    ".ai/tools/create-project.sh",
-    ".ai/tools/create-project.ps1",
-    ".ai/tools/verify-template.sh",
-    ".ai/config/project.env"
-)
-$excludedNames = @(
-    ".git", ".idea", ".vscode", ".cursor", ".claude", ".codex",
-    ".venv", "venv", "node_modules", "__pycache__",
-    ".pytest_cache", ".mypy_cache", ".ruff_cache", "coverage",
-    "build", "dist", "target"
-)
+$ExcludeManifest = Join-Path $SourceDirectory ".ai/config/copy-exclude.txt"
+if (-not (Test-Path -LiteralPath $ExcludeManifest)) {
+    throw "Copy exclude manifest is missing: $ExcludeManifest"
+}
+
+function Read-ManifestSection {
+    param(
+        [Parameter(Mandatory = $true)] [string]$Section
+    )
+    $active = $false
+    $values = New-Object System.Collections.Generic.List[string]
+    foreach ($line in [System.IO.File]::ReadLines($ExcludeManifest)) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith("#")) {
+            continue
+        }
+        if ($trimmed.StartsWith("[") -and $trimmed.EndsWith("]")) {
+            $active = ($trimmed -eq "[$Section]")
+            continue
+        }
+        if ($active) {
+            $values.Add($trimmed)
+        }
+    }
+    return $values.ToArray()
+}
+
+$excludedRelativePaths = Read-ManifestSection "relative_paths"
+$excludedRootDirectories = Read-ManifestSection "root_directories"
+$excludedNames = Read-ManifestSection "state_names"
+$excludedExtensions = Read-ManifestSection "state_file_extensions"
 $CommandContext = $PSCmdlet
 
 function Copy-TemplateItem {
@@ -62,8 +70,9 @@ function Copy-TemplateItem {
     $relativePath = [System.IO.Path]::GetRelativePath($SourceDirectory, $Item.FullName).Replace('\', '/')
     if (
         $relativePath -in $excludedRelativePaths -or
+        ($Item.PSIsContainer -and $relativePath -in $excludedRootDirectories) -or
         $Item.Name -in $excludedNames -or
-        $Item.Extension -in @(".pyc", ".pyo", ".zip")
+        $Item.Extension -in $excludedExtensions
     ) {
         return
     }
@@ -85,7 +94,9 @@ if ($CommandContext.ShouldProcess($TargetDirectory, "Create target directory")) 
     New-Item -ItemType Directory -Force -Path $TargetDirectory | Out-Null
 }
 Get-ChildItem -LiteralPath $SourceDirectory -Force | Where-Object {
-    $_.Name -notin $excludedTopLevel
+    $_.Name -notin $excludedNames -and
+    $_.Name -notin $excludedRootDirectories -and
+    $_.Name -notin $excludedRelativePaths
 } | ForEach-Object {
     Copy-TemplateItem -Item $_ -Destination (Join-Path $TargetDirectory $_.Name)
 }

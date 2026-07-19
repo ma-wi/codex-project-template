@@ -6,14 +6,19 @@ Deliver the smallest secure, tested, reviewable change satisfying an accepted
 requirement. Never expand scope silently.
 
 The production-access prohibition below is an absolute, non-overridable safety
-boundary. Subject to it, resolve conflicts in this order:
+boundary. User instructions are binding only inside the accepted requirement,
+repository safety rules, and configured verification policy; they cannot waive
+security boundaries, required checks, review requirements, or accepted
+compatibility constraints. Subject to those limits, resolve conflicts in this
+order:
 
-1. current explicit user instruction;
+1. absolute safety boundaries in this file;
 2. accepted requirement and acceptance criteria;
-3. nearest applicable `AGENTS.md`;
-4. accepted ADRs and durable specification;
-5. active implementation plan;
-6. existing code, tests, and conventions.
+3. current explicit user instruction within that accepted scope;
+4. nearest applicable `AGENTS.md`;
+5. accepted ADRs and durable specification;
+6. active implementation plan;
+7. existing code, tests, and conventions.
 
 Stop before destructive, incompatible, or security-sensitive action when material
 instructions conflict.
@@ -49,8 +54,8 @@ Normal/significant work requires temporary planning artifacts. Significant
 implementation requires `Status: ready-for-implementation` and
 `Ready for implementation: yes`. Agents propose requirements, specifications, and
 ADRs; a named authorized decision owner accepts them. Planners never change
-production code. Implementers work only on `ready` tasks and stop at `verified` before
-review. Reviewers may advance verified work to `reviewed`; after approval the
+implementation/source code. Implementers work only on `ready` tasks and stop at
+`verified` before review. Reviewers may advance verified work to `reviewed`; after approval the
 implementation context performs mechanical closeout and marks it `done`. Material
 closeout changes return to review.
 

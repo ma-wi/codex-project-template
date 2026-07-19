@@ -1,6 +1,10 @@
 # Security policy
 
-- Status: incomplete
+- Status: template-scaffold
+
+This file is intentionally incomplete in the template repository. Copied projects
+must replace the placeholders below and set `Status: ready` before full
+verification can pass.
 
 ## Reporting a vulnerability
 
