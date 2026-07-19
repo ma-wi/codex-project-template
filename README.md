@@ -164,7 +164,17 @@ Keep temporary files through independent review. During closeout, first transfer
 
 ## Verification
 
-For a configured project:
+Before bootstrap, run only:
+
+```bash
+./.ai/tools/verify.sh
+```
+
+It recognizes `project.name: "CHANGE_ME"` and validates the template itself:
+documentation, shell/Python syntax, copy safety, dependency policy, bootstrap
+generation, and lifecycle state checks.
+
+After bootstrap, focused gates are available for configured projects:
 
 ```bash
 ./.ai/tools/format.sh --check
@@ -179,8 +189,6 @@ For a configured project:
 `verify.sh` also runs `./.ai/tools/ci-setup.sh` for configured projects, then every
 mandatory gate. It ignores machine-local overrides and does not treat a mandatory
 skip as success.
-
-Before configuration, `verify.sh` recognizes `project.name: "CHANGE_ME"` and validates the template itself: documentation, shell/Python syntax, copy safety, dependency policy, bootstrap generation, and lifecycle state checks.
 
 ## Dependency and supply-chain baseline
 

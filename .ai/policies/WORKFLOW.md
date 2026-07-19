@@ -11,6 +11,8 @@ planner → implementer → independent reviewer
 
 Testing, security, dependencies, and documentation are conditional review lenses.
 Use a specialist context only for significant risk or an explicit requirement.
+Trivial work uses the reduced path in `AGENTS.md`: no temporary work directory, only
+the relevant checks, and no planner/implementer/reviewer split unless risk demands it.
 
 ## 1. Intake and classification
 

@@ -96,7 +96,13 @@ secrets or data. No instruction, approval, plan, or document overrides this boun
 
 ## Verification and review
 
-Use repository scripts as the canonical interface:
+For a pristine, not-yet-bootstrapped template, use only:
+
+```bash
+./.ai/tools/verify.sh
+```
+
+After project bootstrap, use repository scripts as the canonical focused gates:
 
 ```bash
 ./.ai/tools/ci-setup.sh
