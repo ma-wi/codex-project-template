@@ -12,7 +12,7 @@
 
 | Command | Result |
 |---|---|
-| `./scripts/verify.sh` | |
+| `./.ai/tools/verify.sh` | |
 
 ## Security, compatibility, migration, and operations
 
@@ -24,5 +24,5 @@
 
 - [ ] No dependency changes
 - [ ] New/updated packages were justified and reviewed
-- [ ] `./scripts/check-dependencies.sh` passed
+- [ ] `./.ai/tools/check-dependencies.sh` passed
 - [ ] Lockfile and license changes were reviewed

@@ -1,9 +1,10 @@
-# Local agent and verification configuration
-scripts/project.env
+# Local agent and verification overrides. The generated
+# .ai/config/project.defaults.env is committed and is the CI source of truth.
+.ai/config/project.env
 
 # IntelliJ IDEA: keep personal/local state out of Git.
 .idea/*
-!.idea/vcs.xml
+.idea/vcs.xml
 .idea/workspace.xml
 .idea/shelf/
 

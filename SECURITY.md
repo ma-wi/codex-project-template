@@ -17,4 +17,4 @@ Document supported release lines and security-update policy.
 
 ## Development requirements
 
-All changes must follow `AGENTS.md` and `docs/ai/SECURITY_GUIDELINES.md`. High-impact findings block completion until resolved or explicitly accepted by an authorized owner.
+All changes must follow `AGENTS.md` and `.ai/policies/SECURITY_GUIDELINES.md`. High-impact findings block completion until resolved or explicitly accepted by an authorized owner.

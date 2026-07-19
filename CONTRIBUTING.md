@@ -2,24 +2,23 @@
 
 ## Local setup
 
-Document project-specific prerequisites and setup commands here.
+Document project-specific prerequisites and setup commands here. Bootstrap generates committed defaults; local overrides are optional.
 
 ```bash
-cp scripts/project.env.example scripts/project.env
-chmod +x scripts/*.sh
-./scripts/verify.sh
+chmod +x .ai/tools/*.sh
+./.ai/tools/verify.sh
 ```
 
 ## Change workflow
 
 1. Start from an accepted requirement with testable acceptance criteria.
-2. Update `docs/ai/CURRENT_PLAN.md` for non-trivial work.
+2. Use a dedicated branch/worktree and update `.ai/CURRENT_PLAN.md` for normal or significant work.
 3. Keep the change focused on the accepted scope.
 4. Add or update tests with the implementation.
 5. Run focused checks while developing.
-6. Run `./scripts/verify.sh` before requesting review.
-7. Update affected human and agent documentation.
-8. Request an independent review.
+6. Run `./.ai/tools/verify.sh` before requesting review.
+7. Update only affected durable documentation.
+8. Request an independent fresh-context review for normal and significant work.
 
 ## Pull requests
 

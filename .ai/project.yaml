@@ -1,0 +1,26 @@
+project:
+  name: "CHANGE_ME"
+
+stacks:
+  python:
+    enabled: true
+  react:
+    enabled: false
+    directory: "frontend"
+    package_manager: "npm"
+  bash:
+    enabled: false
+  dotnet:
+    enabled: false
+    solution: ""
+
+engineering_knowledge:
+  enabled: false
+
+documentation:
+  budgets:
+    agents_md_lines: 240
+    project_context_lines: 250
+    current_plan_lines: 35
+    next_steps_items: 10
+    active_work_item_lines: 180
