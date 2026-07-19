@@ -4,19 +4,20 @@ project:
 stacks:
   python:
     enabled: true
+    directory: "backend"
   react:
     enabled: false
     directory: "frontend"
     package_manager: "npm"
   bash:
-    enabled: false
+    enabled: true
   dotnet:
     enabled: false
     solution: ""
     test_project: ""
 
 engineering_knowledge:
-  enabled: false
+  enabled: true
 
 documentation:
   budgets:

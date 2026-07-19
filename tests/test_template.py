@@ -54,20 +54,20 @@ class BootstrapTests(unittest.TestCase):
             {
                 "project": {"name": "CHANGE_ME"},
                 "stacks": {
-                    "python": {"enabled": True},
+                    "python": {"enabled": True, "directory": "backend"},
                     "react": {
                         "enabled": False,
                         "directory": "frontend",
                         "package_manager": "npm",
                     },
-                    "bash": {"enabled": False},
+                    "bash": {"enabled": True},
                     "dotnet": {
                         "enabled": False,
                         "solution": "",
                         "test_project": "",
                     },
                 },
-                "engineering_knowledge": {"enabled": False},
+                "engineering_knowledge": {"enabled": True},
                 "documentation": {
                     "budgets": {
                         "agents_md_lines": 240,
@@ -102,6 +102,19 @@ class BootstrapTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "unused_switch"):
             self.bootstrap.validate_config(data)
 
+    def test_python_directory_is_importable_package_name(self) -> None:
+        data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
+        data["stacks"]["python"]["directory"] = "backend-api"
+        with self.assertRaisesRegex(SystemExit, "importable Python package"):
+            self.bootstrap.validate_config(data)
+
+    def test_generated_python_gates_target_backend_directory(self) -> None:
+        data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
+        generated = self.bootstrap.generate_env(data)
+        self.assertIn("uv run --locked mypy '\\''backend'\\'' tests", generated)
+        self.assertNotIn("mypy --exclude '^\\\\.ai/' .", generated)
+        self.assertIn("uv run --locked bandit -q -r '\\''backend'\\''", generated)
+
     def test_dotnet_requires_explicit_test_project(self) -> None:
         data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
         data["stacks"]["python"]["enabled"] = False
@@ -117,7 +130,8 @@ class BootstrapTests(unittest.TestCase):
 
     def test_powershell_files_require_a_pester_suite(self) -> None:
         data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
-        data["stacks"]["python"]["enabled"] = False
+        for settings in data["stacks"].values():
+            settings["enabled"] = False
         data["stacks"]["dotnet"]["enabled"] = True
         data["stacks"]["dotnet"]["test_project"] = "tests/App.Tests/App.Tests.vbproj"
         with tempfile.TemporaryDirectory() as temporary:
@@ -298,7 +312,8 @@ class BootstrapTests(unittest.TestCase):
         if os.name == "nt" or not shutil.which("bash"):
             self.skipTest("Generated .NET shell gate runs on the Unix CI job")
         data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
-        data["stacks"]["python"]["enabled"] = False
+        for settings in data["stacks"].values():
+            settings["enabled"] = False
         data["stacks"]["dotnet"]["enabled"] = True
         data["stacks"]["dotnet"]["test_project"] = "tests/App.Tests/App.Tests.vbproj"
         with tempfile.TemporaryDirectory() as temporary:
@@ -439,7 +454,8 @@ class BootstrapTests(unittest.TestCase):
                 setattr(self.bootstrap, "ROOT", original_root)
             updated = path.read_text(encoding="utf-8")
             self.assertNotIn("Run bootstrap", updated)
-            self.assertIn("SECURITY.md", updated)
+            self.assertIn(".ai/PROJECT_CONTEXT.md", updated)
+            self.assertIn(".ai/policies/QUALITY_GATES.md", updated)
 
 
 class GateTests(unittest.TestCase):
@@ -832,7 +848,6 @@ class CopySafetyTests(unittest.TestCase):
         excluded = (
             "README.md",
             "CHANGELOG.md",
-            "CONTRIBUTING.md",
             "tests",
             ".ai/work",
             "docs/architecture/decisions/ADR-0001-ai-control-plane.md",
@@ -852,8 +867,8 @@ class CopySafetyTests(unittest.TestCase):
 
         retained = (
             "AGENTS.md",
-            "SECURITY.md",
             ".ai/project.yaml",
+            ".ai/policies/SECURITY_GUIDELINES.md",
             ".ai/templates/ADR.md",
             ".ai/templates/THREAT_MODEL.md",
             ".ai/templates/OWNERSHIP.md",
@@ -1348,12 +1363,6 @@ class ConfiguredProjectVerificationTests(unittest.TestCase):
         )
         (root / "README.md").write_text("# Configured project\n", encoding="utf-8")
         (root / "AGENTS.md").write_text("# Project rules\n", encoding="utf-8")
-        (root / "SECURITY.md").write_text(
-            "# Security policy\n\n- Status: ready\n\n"
-            "Report vulnerabilities privately to security@example.invalid.\n"
-            "Supported release lines receive security updates.\n",
-            encoding="utf-8",
-        )
         (root / ".ai/PROJECT_CONTEXT.md").write_text(
             "# Project context\n\n## Purpose\n\n"
             "- Product or service: configured test project\n"
@@ -1451,25 +1460,6 @@ class ConfiguredProjectVerificationTests(unittest.TestCase):
             )
             self.assertNotEqual(0, result.returncode)
             self.assertIn("tests: FAIL", result.stderr)
-
-    def test_incomplete_security_scaffold_fails_documentation_gate(self) -> None:
-        if os.name == "nt" or not shutil.which("bash"):
-            self.skipTest("Project verification runs on the Unix CI job")
-        with tempfile.TemporaryDirectory() as temporary:
-            root = self.make_project(temporary)
-            (root / "SECURITY.md").write_text(
-                "# Security policy\n\nReplace this section with the project's private security reporting channel.\n",
-                encoding="utf-8",
-            )
-            result = subprocess.run(
-                ["bash", os.fspath(root / ".ai/tools/verify.sh")],
-                cwd=root,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            self.assertNotEqual(0, result.returncode)
-            self.assertIn("security reporting channel is incomplete", result.stdout)
 
     def test_incomplete_quality_decision_fails_documentation_gate(self) -> None:
         if os.name == "nt" or not shutil.which("bash"):

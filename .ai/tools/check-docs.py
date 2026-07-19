@@ -18,10 +18,6 @@ from _common import (  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / ".ai" / "project.yaml"
 FORBIDDEN_PLACEHOLDERS = re.compile(r"CHANGE_ME|TODO_TEMPLATE|<[A-Z][A-Z0-9_]+>")
-INCOMPLETE_SECURITY_MARKERS = (
-    "Replace this section with the project's private security reporting channel",
-    "Document supported release lines and security-update policy",
-)
 REQUIRED_CONTEXT_FIELDS = ("Product or service", "Primary users", "Main outcome")
 REQUIRED_QUALITY_DECISIONS = (
     "Minimum coverage policy",
@@ -76,15 +72,6 @@ def main() -> int:
     budgets = get(data, "documentation", "budgets", default={}) or {}
 
     if not template_state:
-        security_path = ROOT / "SECURITY.md"
-        if not security_path.is_file():
-            errors.append("required security policy is missing: SECURITY.md")
-        else:
-            security_text = security_path.read_text(encoding="utf-8")
-            if not re.search(
-                r"^-\s*Status:\s*ready\s*$", security_text, re.MULTILINE
-            ) or any(marker in security_text for marker in INCOMPLETE_SECURITY_MARKERS):
-                errors.append("security reporting channel is incomplete in SECURITY.md")
         require_filled_fields(
             ROOT / ".ai/PROJECT_CONTEXT.md",
             REQUIRED_CONTEXT_FIELDS,

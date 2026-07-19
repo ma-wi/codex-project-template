@@ -4,7 +4,6 @@
 [relative_paths]
 README.md
 CHANGELOG.md
-CONTRIBUTING.md
 .github/workflows/template-copy.yml
 docs/architecture/decisions/ADR-0001-ai-control-plane.md
 docs/specifications/REQ-ai-control-plane-layout.md

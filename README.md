@@ -1,22 +1,59 @@
-# Codex project template
+# Codex-Projekt-Template
 
-A secure, review-oriented starting point for complex projects implemented with coding agents in IntelliJ IDEA. Python is enabled by default; React/TypeScript, Bash, and .NET/Visual Basic/PowerShell are optional stacks.
+Dieses Repository ist ein Template für neue Entwicklungsprojekte, die mit Coding Agents bearbeitet werden. Es liefert keine fertige Anwendung, sondern eine wiederverwendbare Agent-Control-Plane: Regeln, Rollen, Dokumentationsstruktur, Bootstrap-Skripte und CI-Prüfungen.
 
-The intended lifecycle uses three fresh agent contexts:
+Python ist standardmäßig aktiviert. React/TypeScript, Bash und .NET/Visual Basic/PowerShell können optional in `.ai/project.yaml` aktiviert werden.
+
+## Kurzüberblick
+
+Der typische Ablauf ist:
 
 ```text
-accepted requirement → planner → implementer → independent reviewer
-                                      ↑ remediation ↓
-                                  curation and closeout
+akzeptierte Anforderung -> Planner -> Implementer -> unabhängiger Reviewer
+                                      ^ Fehlerbehebung v
+                                  Doku-Pflege und Closeout
 ```
 
-`AGENTS.md` contains compact binding rules. `.ai/policies/WORKFLOW.md` is the single canonical lifecycle description. The `.ai/` directory isolates agent configuration, tooling, policies, roles, templates, and temporary state from application-owned paths.
+Die wichtigsten Dateien sind:
 
-## Create a project
+- `AGENTS.md`: Einstiegspunkt und verbindliche Kurzregeln für Agents.
+- `.ai/project.yaml`: technische Projektkonfiguration, zum Beispiel aktivierte Stacks.
+- `.ai/tools/`: Bootstrap-, CI-, Lint-, Test-, Security- und Verify-Skripte.
+- `.ai/policies/`: dauerhafte Regeln für Workflow, Security, Dependencies, Doku und Quality Gates.
+- `.ai/roles/`: Rollenbeschreibungen für Planner, Implementer und Reviewer.
+- `.ai/templates/`: Vorlagen für Requirements, Specs, ADRs, Work Items und Reviews.
+- `docs/requirements/`: akzeptierte Anforderungen.
+- `docs/specifications/`: dauerhafte Spezifikationen und Akzeptanzkriterien.
+- `docs/architecture/decisions/`: Architekturentscheidungen, also ADRs.
+- `.ai/work/`: temporäre aktive Arbeitspläne pro Requirement.
 
-Do not copy the template's `.git`, IDE/agent state, local environments, caches, or this setup README. Preview first.
+## Wie das Template funktioniert
 
-### Linux, macOS, Git Bash, or WSL
+1. Mit `create-project.*` wird aus dem Template ein neues Projekt kopiert.
+2. Template-interne Dateien wie Template-Tests, Copy-Skripte und Template-eigene Requirements werden nicht übernommen.
+3. In `.ai/project.yaml` werden Projektname und Stacks konfiguriert.
+4. `bootstrap` erzeugt projektkonkrete Defaults in `.ai/config/project.defaults.env`.
+5. `verify.sh` führt alle verbindlichen Gates aus.
+
+`verify.sh` prüft unter anderem:
+
+- Work-State
+- Dokumentations-Readiness
+- Setup
+- Formatierung
+- Linting und statische Analyse
+- Tests
+- Dependency Policy
+- Security Checks
+- Build
+
+Wichtig: `.ai/config/project.env` darf lokale Befehle für fokussierte Gates überschreiben. `verify.sh` ignoriert diese Datei aber absichtlich. CI verwendet nur die committed Defaults aus `.ai/config/project.defaults.env`.
+
+## Neues Projekt erstellen
+
+Kopiere das Template nicht manuell. Nutze die Copy-Skripte, damit Template-interne Dateien nicht im neuen Projekt landen.
+
+### Linux, macOS, Git Bash oder WSL
 
 ```bash
 ./.ai/tools/create-project.sh --dry-run /path/to/new-project
@@ -32,65 +69,90 @@ cd /path/to/new-project
 Set-Location "C:\Projects\new-project"
 ```
 
-The target must be empty unless `--force` or `-Force` is explicitly supplied. Force mode may overwrite same-named template files but must not delete unrelated target content. Dry-run and WhatIf do not create an environment or modify the target.
+Das Zielverzeichnis muss leer sein, außer `--force` oder `-Force` wird bewusst verwendet. Force-Modus darf gleichnamige Template-Dateien überschreiben, aber keine fremden Inhalte löschen.
 
-The copy contains reusable project rules, security policy, configuration, project CI, bootstrap, and verification scripts. It deliberately omits template-only state:
+Die Kopie enthält die wiederverwendbaren Projektregeln, Security-Regeln, Konfiguration, CI, Bootstrap und Verify-Skripte. Nicht kopiert werden unter anderem:
 
-- `README.md`, `CHANGELOG.md`, and `CONTRIBUTING.md`;
-- `tests/` and temporary `.ai/work/` artifacts;
-- this template repository's own hardening/control-plane requirements, specifications, and ADR;
-- the project-copy scripts and `.ai/tools/verify-template.sh`;
-- `.ai/config/copy-exclude.txt`, the template-maintenance manifest for copy boundaries;
-- the template-only Windows copy-test workflow;
-- Git/IDE/agent state, local environments, caches, coverage, and build outputs.
+- dieses Template-`README.md` und `CHANGELOG.md`;
+- Template-Tests und temporäre `.ai/work/`-Artefakte;
+- Template-eigene Requirements, Spezifikationen und ADRs;
+- Copy-Skripte und `.ai/tools/verify-template.sh`;
+- `.ai/config/copy-exclude.txt`, das nur für die Template-Pflege gebraucht wird;
+- lokale IDE-/Agent-/Cache-/Build-Zustände.
 
-Bootstrap creates the new project README. Create the project changelog and contributing guide only when their actual policies and release process are known. `SECURITY.md` remains as a required project policy scaffold and must be completed with the real private reporting channel.
+`bootstrap` erzeugt später ein neues Projekt-README. Die Security-Regeln liegen in `.ai/policies/SECURITY_GUIDELINES.md`; ein separates Root-`SECURITY.md` wird nicht mehr mitgeführt.
 
-The copied project does not inherit template self-tests. React bootstrap creates a
-scaffold smoke test; other stacks must provide meaningful project tests, and the Bash
-gate fails explicitly when `tests/shell` is absent. Before bootstrap, verification
-fails with a bootstrap-required message.
+## Konfiguration und Bootstrap
 
-## Configure and bootstrap
+Bearbeite zuerst `.ai/project.yaml`:
 
-Edit `.ai/project.yaml` before bootstrap:
+- `project.name: "CHANGE_ME"` ersetzen;
+- nur benötigte Stacks aktivieren;
+- bei Python das Backend-Verzeichnis festlegen, standardmäßig `backend`;
+- bei React Package Manager und Verzeichnis festlegen;
+- bei .NET Solution und explizites Testprojekt eintragen;
+- `engineering_knowledge` nur aktivieren, wenn der MCP wirklich eingerichtet ist.
 
-- replace `project.name: "CHANGE_ME"`;
-- enable only required stacks;
-- choose the React package manager and project-relative directories;
-- when .NET is enabled, identify its solution and explicit test project;
-- enable the engineering-knowledge MCP only when it is actually configured.
+Alle konfigurierten Pfade müssen unterhalb des Repository-Roots bleiben. Absolute Pfade und `..` werden abgelehnt.
 
-All configured paths must remain below the repository root. Absolute paths and `..` traversal are rejected.
-
-Run:
+Dann Bootstrap ausführen:
 
 ```bash
 ./.ai/tools/bootstrap.sh
 ```
 
-Install the template's pinned uv version shown in `.github/workflows/ci.yml` when Python is enabled and the Node.js version from `.node-version` when React is enabled. Bootstrap rejects different versions so generated manifests and lockfiles do not depend silently on the developer machine. For React projects using pnpm or Yarn, bootstrap writes matching `packageManager` metadata so frozen installs use the intended tool family.
-
-Or on Windows without Bash:
+Oder unter Windows ohne Bash:
 
 ```powershell
 python .\.ai\tools\bootstrap.py
 ```
 
-Bootstrap may initialize the configured Python or React project and install the explicitly configured, pinned development tools. It then generates:
+Wenn Python aktiviert ist, muss die in `.github/workflows/ci.yml` gepinnte `uv`-Version installiert sein. Wenn React aktiviert ist, muss die Version aus `.node-version` verwendet werden. Bei pnpm oder Yarn schreibt Bootstrap passende `packageManager`-Metadaten in `package.json`.
+
+Bootstrap erzeugt oder aktualisiert:
 
 ```text
 .ai/config/project.defaults.env
 ```
 
-This file is the versioned source of truth for full local verification and CI and
-must be committed. Machine-local command overrides belong in ignored
-`.ai/config/project.env`; focused gates use them, while `verify.sh` ignores them.
-They cannot weaken mandatory policy. Never put secrets in either file.
+Diese Datei ist die committed Quelle für lokale Vollverifikation und CI. Sie muss eingecheckt werden. Lokale Overrides gehören in `.ai/config/project.env`; diese Datei darf keine Secrets enthalten und wird von `verify.sh` ignoriert.
 
-Review all generated manifest and lockfile changes before committing them.
+## Pflichtfelder nach Bootstrap
 
-## Initialize Git and GitHub
+Sobald `project.name` nicht mehr `CHANGE_ME` ist, behandelt `./.ai/tools/verify.sh` das Repository als echtes Projekt. Dann scheitert CI absichtlich, solange projektbezogene Pflichtfelder leer sind.
+
+Das ist kein GitHub-Actions-Problem und kein Fehler, weil die Anwendung noch blank ist. Es bedeutet: Die Projektregeln sind noch nicht ausgefüllt.
+
+Vor einem grünen CI-Lauf müssen diese Dateien angepasst werden:
+
+- `.ai/PROJECT_CONTEXT.md`: mindestens `Product or service`, `Primary users` und `Main outcome` ausfüllen.
+- `.ai/policies/QUALITY_GATES.md`: alle Einträge unter `Required project decisions` ausfüllen.
+
+Für ein privates Einzelprojekt reichen einfache Regeln. Die Defaults in `.ai/policies/QUALITY_GATES.md` sind bewusst pragmatisch formuliert und können später verschärft werden.
+
+Diese Werte stehen nicht an einer zentralen Stelle, weil sie verschiedene Arten von Projektdokumentation sind:
+
+- `.ai/PROJECT_CONTEXT.md` ist kompakte Orientierung für Agents.
+- `.ai/policies/QUALITY_GATES.md` ist die dauerhafte Quality-/CI-Policy.
+- `.ai/policies/SECURITY_GUIDELINES.md` enthält die Security-Defaults und wird bei Security-relevanten Änderungen geladen.
+
+Die zentrale technische Prüfung sitzt in `.ai/tools/check-docs.py`; sie prüft nur, ob die Pflichtfelder nicht mehr leer oder Platzhalter sind.
+
+## Quality Gates verstehen
+
+`.ai/policies/QUALITY_GATES.md` beschreibt die Regeln. Die konkreten Befehle stehen nach Bootstrap in `.ai/config/project.defaults.env`.
+
+Die Felder unter `Required project decisions` sind keine Shell-Befehle. Dort stehen normale Projektregeln:
+
+- `Minimum coverage policy`: Wann brauchst du Tests?
+- `Supported runtime matrix`: Welche Laufzeitumgebung unterstützt du?
+- `Warning-as-error policy`: Was passiert mit Warnungen?
+- `Security severity threshold`: Ab welcher Security-Stufe ist Schluss?
+- `Dependency update policy`: Wie gehst du mit neuen Libraries um?
+- `Flaky-test policy`: Was passiert mit wackeligen Tests?
+- `CI required checks`: Welche CI-Prüfung muss vor Merge grün sein?
+
+## Git und GitHub initialisieren
 
 ```bash
 git init
@@ -101,83 +163,67 @@ git remote add origin git@github.com:ORGANIZATION/REPOSITORY.git
 git push -u origin main
 ```
 
-Recommended repository settings:
+Empfohlene Repository-Einstellungen:
 
-- protect `main` and require pull requests;
-- require the CI verification job;
-- prevent direct pushes;
-- enable secret scanning, dependency alerts, and code scanning where available;
-- use environment protection and OIDC rather than long-lived deployment secrets when deployment is later added.
+- `main` schützen und Pull Requests verlangen;
+- den CI-Verify-Job als required check setzen;
+- direkte Pushes auf `main` verhindern;
+- Secret Scanning, Dependency Alerts und Code Scanning aktivieren, wenn verfügbar;
+- später für Deployments lieber OIDC und Environment Protection statt langlebiger Secrets verwenden.
 
-The included workflow uses least-privilege read permissions, pinned action commits,
-versioned runner labels, concurrency cancellation, timeouts, and `./.ai/tools/verify.sh`.
+## Entwicklungsworkflow
 
-## Initial product planning
+Für normale oder größere Änderungen gilt:
 
-Do not invent the final architecture during template setup. First store the supplied requirement under:
+1. Requirement akzeptieren.
+2. Planner erstellt Spezifikation und Plan.
+3. Implementer setzt nur `ready` Tasks um.
+4. `./.ai/tools/verify.sh` muss grün sein.
+5. Frischer Reviewer prüft unabhängig.
+6. Nach Approval werden Doku und temporäre `.ai/work`-Artefakte bereinigt.
 
-```text
-docs/requirements/REQ-001-initial-project.md
-```
+Für kleine, rein mechanische Änderungen kann der Prozess reduziert werden. Die Regeln dazu stehen in `AGENTS.md` und `.ai/policies/WORKFLOW.md`.
 
-Then start a fresh planning agent. The planner performs discovery when material product or architecture decisions remain unclear, creates the durable specification under `docs/specifications/`, proposes necessary ADRs, and creates only the temporary implementation plan/tasks needed for execution. The named authorized decision owner—not the planning agent—records acceptance.
+## Agent-Rollen
 
-Accept the specification and architecture decisions before starting the implementation agent.
+Nutze für die Standardrollen frische Agent-Kontexte:
 
-## Agent roles
+- Planner: `.ai/roles/PLANNER.md`
+- Implementer: `.ai/roles/IMPLEMENTER.md`
+- Independent reviewer: `.ai/roles/CODE_REVIEWER.md`
 
-Use fresh contexts for the three standard roles. Point each agent at `AGENTS.md`,
-`.ai/project.yaml`, its role file, and the accepted requirement or active plan:
+Nur diese drei Rollen sind Standard. Security-, Dependency-, Test- und Doku-Hinweise werden über `.ai/policies/REVIEW_LENSES.md` je nach Risiko geladen.
 
-- Planner: `.ai/roles/planner.md`
-- Implementer: `.ai/roles/implementer.md`
-- Independent reviewer: `.ai/roles/code-reviewer.md`
+## Dauerhafte und temporäre Informationen
 
-Return findings to the implementation agent. `P0` and `P1` remediations require a fresh reviewer pass.
+Dauerhaft:
 
-## Change classes and context cost
+- `docs/requirements/`: akzeptierte Anforderungen;
+- `docs/specifications/`: beobachtbares Verhalten, Akzeptanzkriterien und Test-Seams;
+- `docs/architecture/decisions/`: akzeptierte Architekturentscheidungen;
+- gepflegte Projekt-, Betriebs-, Security- und Architektur-Dokumentation;
+- Code und Tests.
 
-- **Trivial:** mechanical and behavior-neutral; no work directory.
-- **Normal:** compact plan, tests, full verification, independent review.
-- **Significant:** discovery when needed, durable specification, accepted architecture decisions, task decomposition, full verification, independent review, and risk-triggered specialist review.
-
-Only the three primary roles are standard. Security, test, dependency, and documentation guidance are conditional review lenses in `.ai/policies/review-lenses.md`. Agents should load only applicable policy files rather than the entire control plane.
-
-Use one active requirement per Git branch/worktree. Create another worktree when planning a future feature while implementation is still active.
-
-## Durable and temporary information
-
-Durable:
-
-- `docs/requirements/` — accepted source requirements;
-- `docs/specifications/` — observable behavior, acceptance criteria, and stable test seams;
-- `docs/architecture/decisions/` — accepted architecture decisions;
-- maintained product, operation, security, and architecture documentation;
-- code and tests.
-
-Temporary:
+Temporär:
 
 - `.ai/work/<requirement-id>/PLAN.md`;
-- task status files;
-- local review and closeout notes.
+- Task-Dateien;
+- lokale Review- und Closeout-Notizen.
 
-Keep temporary files through independent review. During closeout, first transfer durable information, then run final verification, summarize the result in the pull request, remove the temporary work directory, and reset `CURRENT_PLAN.md`.
+Temporäre Dateien bleiben bis nach dem unabhängigen Review erhalten. Danach werden dauerhafte Informationen übertragen, `verify.sh` wird erneut ausgeführt, offene Punkte werden in Issues oder `.ai/NEXT_STEPS.md` verschoben und `.ai/CURRENT_PLAN.md` wird zurückgesetzt.
 
-## Verification
+## Verifikation
 
-Before bootstrap, run only:
+Vor Bootstrap im Template:
 
 ```bash
 ./.ai/tools/verify.sh
 ```
 
-It recognizes `project.name: "CHANGE_ME"` and validates the template itself:
-documentation, shell/Python syntax, copy safety, dependency policy, bootstrap
-generation, and lifecycle state checks.
-
-After bootstrap, focused gates are available for configured projects:
+Nach Bootstrap im konkreten Projekt:
 
 ```bash
+./.ai/tools/ci-setup.sh
 ./.ai/tools/format.sh --check
 ./.ai/tools/lint.sh
 ./.ai/tools/test.sh
@@ -187,74 +233,70 @@ After bootstrap, focused gates are available for configured projects:
 ./.ai/tools/verify.sh
 ```
 
-`verify.sh` also runs `./.ai/tools/ci-setup.sh` for configured projects, then every
-mandatory gate. It ignores machine-local overrides and does not treat a mandatory
-skip as success.
+`verify.sh` führt die verpflichtenden Gates aus und behandelt ein fehlendes verpflichtendes Gate nicht als Erfolg.
 
-## Dependency and supply-chain baseline
+## Dependencies und Supply Chain
 
-The committed policy requires lockfiles and rejects obvious floating sources. It inspects supported manifests recursively, including frontend subdirectories, Python dependency groups, `uv.lock`, Node lockfiles, Cargo/Go integrity files, and .NET package lockfiles.
+Die Dependency Policy verlangt Lockfiles und lehnt offensichtlich unsichere oder nicht interpretierbare direkte Dependency-Angaben ab. Neue oder aktualisierte Dependencies brauchen weiterhin eine kurze menschliche Prüfung: Warum ist sie nötig, wer pflegt sie, welche Lizenz hat sie, gibt es bekannte Schwachstellen, welche Transitives kommen mit, und wie wird sie wieder entfernt oder ersetzt, falls sie problematisch wird?
 
-New or upgraded dependencies still require human/agent review of necessity, alternatives, provenance, maintenance, license, install behavior, transitive risk, known vulnerabilities, pinning, and replacement strategy. Automated scanners cannot prove that a package is trustworthy.
-
-Use locked/frozen installs in CI. Pin CI actions to reviewed commit SHAs. Optional hosted reputation services must be reviewed for privacy before receiving private dependency metadata.
+Automatische Scanner helfen, beweisen aber nicht, dass eine Dependency vertrauenswürdig ist.
 
 ## IntelliJ IDEA
 
-1. Open the new project directory.
-2. Confirm the agent can read the root `AGENTS.md`.
-3. Keep command approval and sandbox settings restrictive.
-4. Configure JetBrains Project Rules from `.aiassistant/rules/` only when the IDE does not already load `AGENTS.md`.
-5. Set the AI Self-Review rules path to:
+1. Neues Projektverzeichnis öffnen.
+2. Prüfen, dass der Agent `AGENTS.md` lesen kann.
+3. Command Approval und Sandbox möglichst restriktiv halten.
+4. JetBrains Project Rules aus `.aiassistant/rules/` nur konfigurieren, wenn die IDE `AGENTS.md` nicht automatisch lädt.
+5. Für AI Self-Review diesen Pfad setzen:
 
 ```text
 $PROJECT_DIR$/.aiassistant/review/self-review.md
 ```
 
-6. Enable the optional engineering-knowledge MCP only when allowed by `.ai/project.yaml`.
+6. Optionalen `engineering-knowledge` MCP nur aktivieren, wenn `.ai/project.yaml` das erlaubt.
 
-## Supported stack notes
+## Unterstützte Stack-Hinweise
 
-- Python uses the pinned `uv` bootstrap, a project-local environment, Ruff, mypy, pytest, Bandit, pip-audit, and build.
-- React uses a pinned Vite creator, TypeScript, ESLint, Prettier, Vitest, Testing Library, locked package installation, type checking, and accessibility-focused review.
-- React uses fixed frozen installation commands: `npm ci`, `pnpm install --frozen-lockfile`, or `yarn install --immutable`. Bootstrap writes the pnpm/Yarn `packageManager` metadata for React projects that use those managers.
-- Bash requires ShellCheck and uses Bats when meaningful shell tests exist.
-- .NET uses restore lock mode, format verification, warning-as-error builds, tests, and vulnerable-package inspection. PSScriptAnalyzer and Pester checks are added automatically when project PowerShell files are present during bootstrap.
+- Python nutzt standardmäßig `backend/` als Quellverzeichnis und `tests/` für Tests.
+- Python nutzt `uv`, Ruff, mypy, pytest, Bandit, pip-audit und build.
+- React nutzt Vite, TypeScript, ESLint, Prettier, Vitest und Testing Library.
+- React-Installationen laufen eingefroren: `npm ci`, `pnpm install --frozen-lockfile` oder `yarn install --immutable`.
+- Bash nutzt ShellCheck und Bats, wenn sinnvolle Shell-Tests vorhanden sind.
+- .NET nutzt Restore im Lock-Modus, Formatprüfung, Warnings-as-errors, Tests und Vulnerability-Prüfung.
 
-Remove unused stacks and their rules from a concrete project to reduce context and maintenance cost.
+Nicht benötigte Stacks und Regeln kannst du in konkreten Projekten entfernen, um Kontext und Wartungsaufwand zu reduzieren.
 
-## Optional governance templates
+## Optionale Governance-Vorlagen
 
-- Use `.ai/templates/THREAT_MODEL.md` for public APIs, sensitive data, identity,
-  file parsing, networks, irreversible migrations, or other security-relevant work.
-- Use `.ai/templates/OWNERSHIP.md` to record decision owners, review owners, and
-  branch-protection expectations before complex implementation begins.
+- `.ai/templates/THREAT_MODEL.md`: für Public APIs, sensible Daten, Identity, File Parsing, Netzwerke, irreversible Migrationen oder Security-relevante Änderungen.
+- `.ai/templates/OWNERSHIP.md`: für Entscheidungs- und Review-Zuständigkeiten bei komplexeren Projekten.
 
-## Updating pinned tool versions
+## Gepinnte Tool-Versionen aktualisieren
 
-Tool versions are pinned exactly for reproducible bootstraps. When bumping them, change every copy together, then run `./.ai/tools/verify-template.sh`:
+Tool-Versionen sind absichtlich exakt gepinnt. Wenn du sie aktualisierst, ändere alle Stellen zusammen und führe danach aus:
 
-- `UV_VERSION`, `VITE_VERSION`, `PNPM_VERSION`, `YARN_VERSION`, `PYTHON_DEV_DEPENDENCIES`, and `REACT_QUALITY_DEPENDENCIES` in `.ai/tools/bootstrap.py`;
-- the `astral-sh/setup-uv` `version:` in `.github/workflows/ci.yml`;
-- the pinned Ruff, mypy, and Bandit versions in `.ai/tools/verify-template.sh`;
-- the runtime pins in `.python-version` and `.node-version`.
+```bash
+./.ai/tools/verify-template.sh
+```
 
-Confirm each version resolves on its registry before committing. Bootstrap rejects a mismatched local `uv` or Node.js so generated lockfiles do not depend on an unpinned machine.
+Zu prüfende Stellen:
 
-## Template acceptance checklist
+- `UV_VERSION`, `VITE_VERSION`, `PNPM_VERSION`, `YARN_VERSION`, `PYTHON_DEV_DEPENDENCIES` und `REACT_QUALITY_DEPENDENCIES` in `.ai/tools/bootstrap.py`;
+- die `astral-sh/setup-uv` Version in `.github/workflows/ci.yml`;
+- die gepinnten Ruff-, mypy- und Bandit-Versionen in `.ai/tools/verify-template.sh`;
+- `.python-version` und `.node-version`.
 
-- [ ] Project name and enabled stacks are configured.
-- [ ] Bootstrap completed and generated changes were reviewed.
-- [ ] `SECURITY.md`, `.ai/PROJECT_CONTEXT.md`, and required quality decisions are complete.
-- [ ] `.ai/config/project.defaults.env`, manifests, and lockfiles are committed.
-- [ ] `./.ai/tools/verify.sh` executes every mandatory project gate.
-- [ ] GitHub branch protection requires CI.
-- [ ] Review/decision ownership is documented for complex or sensitive projects.
-- [ ] Threat model is completed when the project has a security-relevant surface.
-- [ ] Initial requirement is accepted.
-- [ ] Durable specification and architecture decisions are accepted.
-- [ ] A fresh planning-to-review lifecycle has been exercised once.
+## Start-Checkliste
 
-## License
+- [ ] Projektname und benötigte Stacks in `.ai/project.yaml` gesetzt.
+- [ ] Bootstrap ausgeführt und generierte Dateien geprüft.
+- [ ] `.ai/PROJECT_CONTEXT.md` und `.ai/policies/QUALITY_GATES.md` ausgefüllt.
+- [ ] `.ai/config/project.defaults.env`, Manifeste und Lockfiles committed.
+- [ ] `./.ai/tools/verify.sh` läuft lokal oder in CI durch.
+- [ ] GitHub Branch Protection verlangt den CI-Verify-Job.
+- [ ] Initiales Requirement angelegt und akzeptiert.
+- [ ] Spezifikation und relevante Architekturentscheidungen akzeptiert.
 
-Choose and add the license appropriate for the generated project. The template does not impose one.
+## Lizenz
+
+Wähle für das erzeugte Projekt eine passende Lizenz. Das Template gibt keine Lizenz vor.
