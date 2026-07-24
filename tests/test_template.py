@@ -67,6 +67,11 @@ class BootstrapTests(unittest.TestCase):
                         "test_project": "",
                     },
                 },
+                "incremental_changes": {
+                    "default_review_cadence": "batch",
+                    "max_tasks_per_review_batch": 3,
+                    "force_task_review_for": "migration public-api authentication authorization security dependency-change",
+                },
                 "engineering_knowledge": {"enabled": False},
                 "documentation": {
                     "budgets": {
@@ -95,6 +100,17 @@ class BootstrapTests(unittest.TestCase):
             "BUILD",
         ):
             self.assertIn(f"REQUIRE_{gate}=1", generated)
+
+    def test_incremental_change_review_configuration_is_validated(self) -> None:
+        data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
+        data["incremental_changes"]["default_review_cadence"] = "continuous"
+        with self.assertRaisesRegex(SystemExit, "default_review_cadence"):
+            self.bootstrap.validate_config(data)
+
+        data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
+        data["incremental_changes"]["max_tasks_per_review_batch"] = 0
+        with self.assertRaisesRegex(SystemExit, "max_tasks_per_review_batch"):
+            self.bootstrap.validate_config(data)
 
     def test_unknown_configuration_keys_are_rejected(self) -> None:
         data = self.bootstrap.load_yaml_subset(AI_ROOT / "project.yaml")
@@ -1205,6 +1221,145 @@ class CopySafetyTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stderr)
             self.assertFalse(target.exists())
 
+    def make_update_fixture(self, root: Path) -> Path:
+        source = root / "source"
+        (source / ".ai/tools").mkdir(parents=True)
+        shutil.copy2(AI_TOOLS / "create-project.sh", source / ".ai/tools")
+        (source / ".ai/config").mkdir(parents=True)
+        shutil.copy2(AI_CONFIG / "copy-exclude.txt", source / ".ai/config")
+        (source / "AGENTS.md").write_text("template agents\n", encoding="utf-8")
+        (source / ".ai/policies").mkdir(parents=True)
+        # Project-owned per the [update_protected] manifest section.
+        (source / ".ai/project.yaml").write_text("name: template\n", encoding="utf-8")
+        # Reusable control-plane file whose template content changed.
+        (source / ".ai/policies/WORKFLOW.md").write_text(
+            "workflow v2\n", encoding="utf-8"
+        )
+        # File that only exists in the newer template.
+        (source / ".ai/policies/NEWFILE.md").write_text("brand new\n", encoding="utf-8")
+        # Excluded from any copy or update.
+        (source / "README.md").write_text("template readme\n", encoding="utf-8")
+        return source
+
+    def make_update_project(self, root: Path) -> Path:
+        project = root / "project"
+        (project / ".ai/policies").mkdir(parents=True)
+        (project / "AGENTS.md").write_text("template agents\n", encoding="utf-8")
+        (project / ".ai/project.yaml").write_text("name: myproject\n", encoding="utf-8")
+        (project / ".ai/policies/WORKFLOW.md").write_text(
+            "workflow v1\n", encoding="utf-8"
+        )
+        (project / "README.md").write_text("project readme\n", encoding="utf-8")
+        return project
+
+    def test_shell_update_writes_patch_without_touching_target(self) -> None:
+        if os.name == "nt" or not shutil.which("bash") or not shutil.which("diff"):
+            self.skipTest("Shell update test needs bash and diff")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = self.make_update_fixture(root)
+            project = self.make_update_project(root)
+            patch = root / "out.patch"
+            result = subprocess.run(
+                [
+                    os.fspath(source / ".ai/tools/create-project.sh"),
+                    "--update",
+                    "--patch-file",
+                    os.fspath(patch),
+                    os.fspath(project),
+                ],
+                cwd=source,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            # The target is left completely untouched in patch mode.
+            self.assertEqual(
+                "workflow v1\n",
+                (project / ".ai/policies/WORKFLOW.md").read_text(encoding="utf-8"),
+            )
+            self.assertFalse((project / ".ai/policies/NEWFILE.md").exists())
+            self.assertEqual(
+                "name: myproject\n",
+                (project / ".ai/project.yaml").read_text(encoding="utf-8"),
+            )
+            patch_text = patch.read_text(encoding="utf-8")
+            self.assertIn("b/.ai/policies/NEWFILE.md", patch_text)
+            self.assertIn("b/.ai/policies/WORKFLOW.md", patch_text)
+            self.assertNotIn("b/.ai/project.yaml", patch_text)
+            manual = root / "out.manual.patch"
+            self.assertIn("b/.ai/project.yaml", manual.read_text(encoding="utf-8"))
+
+    def test_shell_update_apply_integrates_changes_and_protects_seed(self) -> None:
+        if os.name == "nt" or not shutil.which("bash") or not shutil.which("diff"):
+            self.skipTest("Shell update test needs bash and diff")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = self.make_update_fixture(root)
+            project = self.make_update_project(root)
+            patch = root / "out.patch"
+            result = subprocess.run(
+                [
+                    os.fspath(source / ".ai/tools/create-project.sh"),
+                    "--update",
+                    "--apply",
+                    "--patch-file",
+                    os.fspath(patch),
+                    os.fspath(project),
+                ],
+                cwd=source,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            # New and changed reusable files are integrated.
+            self.assertEqual(
+                "brand new\n",
+                (project / ".ai/policies/NEWFILE.md").read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                "workflow v2\n",
+                (project / ".ai/policies/WORKFLOW.md").read_text(encoding="utf-8"),
+            )
+            # Project-owned and excluded files are preserved verbatim.
+            self.assertEqual(
+                "name: myproject\n",
+                (project / ".ai/project.yaml").read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                "project readme\n",
+                (project / "README.md").read_text(encoding="utf-8"),
+            )
+            # The protected difference is still surfaced for manual merge.
+            self.assertIn(
+                "b/.ai/project.yaml",
+                (root / "out.manual.patch").read_text(encoding="utf-8"),
+            )
+
+    def test_shell_update_rejects_non_template_target(self) -> None:
+        if os.name == "nt" or not shutil.which("bash"):
+            self.skipTest("Shell update test runs on the Unix CI job")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = self.make_update_fixture(root)
+            empty = root / "not-a-project"
+            empty.mkdir()
+            result = subprocess.run(
+                [
+                    os.fspath(source / ".ai/tools/create-project.sh"),
+                    "--update",
+                    os.fspath(empty),
+                ],
+                cwd=source,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("does not look like", result.stderr)
+
 
 class LifecycleTests(unittest.TestCase):
     def test_repository_work_state_is_valid(self) -> None:
@@ -1320,6 +1475,35 @@ class LifecycleTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stdout + result.stderr)
             self.assertIn("1 task file", result.stdout)
 
+    def test_multiple_capability_specifications_are_supported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_lifecycle_repo(root)
+            work = root / ".ai/work/REQ-001/tasks"
+            work.mkdir(parents=True)
+            specs = root / "docs/specifications"
+            specs.mkdir(parents=True)
+            for name in ("customer-management.md", "reporting.md"):
+                (specs / name).write_text(
+                    "# Capability\n\n"
+                    "- Status: ready-for-implementation\n"
+                    "- Ready for implementation: yes\n",
+                    encoding="utf-8",
+                )
+            (root / ".ai/CURRENT_PLAN.md").write_text(
+                "# Current work\n\n"
+                "- Work directory: `.ai/work/REQ-001/`\n"
+                "- Specifications: `docs/specifications/customer-management.md`, `docs/specifications/reporting.md`\n"
+                "- Plan: `.ai/work/REQ-001/PLAN.md`\n"
+                "- Status: implementation\n",
+                encoding="utf-8",
+            )
+            (root / ".ai/work/REQ-001/PLAN.md").write_text(
+                "# Plan\n\n- Change class: significant\n", encoding="utf-8"
+            )
+            result = self.run_work_state(root)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
     def test_work_directory_traversal_is_rejected_after_normalization(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -1389,6 +1573,170 @@ class LifecycleTests(unittest.TestCase):
             )
             self.assertNotEqual(0, result.returncode)
             self.assertIn("below docs/specifications", result.stdout)
+
+
+class IncrementalChangeTests(unittest.TestCase):
+    def make_repo(self, root: Path) -> None:
+        (root / ".ai/tools").mkdir(parents=True)
+        shutil.copy2(
+            AI_TOOLS / "check-change-impact.py",
+            root / ".ai/tools/check-change-impact.py",
+        )
+        shutil.copy2(AI_TOOLS / "_common.py", root / ".ai/tools/_common.py")
+        (root / ".ai/work/CHG-001/tasks").mkdir(parents=True)
+        (root / ".ai/project.yaml").write_text(
+            "incremental_changes:\n"
+            '  default_review_cadence: "batch"\n'
+            "  max_tasks_per_review_batch: 2\n"
+            '  force_task_review_for: "migration security"\n',
+            encoding="utf-8",
+        )
+
+    def run_check(self, root: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, os.fspath(root / ".ai/tools/check-change-impact.py")],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def write_valid_change(self, root: Path, *, cadence: str = "batch") -> None:
+        work = root / ".ai/work/CHG-001"
+        (root / ".ai/CURRENT_PLAN.md").write_text(
+            "# Current work\n\n"
+            "- Work type: incremental-change\n"
+            "- Work directory: `.ai/work/CHG-001/`\n"
+            "- Change request: `.ai/work/CHG-001/CHANGE.md`\n"
+            "- Change impact: `.ai/work/CHG-001/IMPACT.md`\n"
+            "- Plan: `.ai/work/CHG-001/PLAN.md`\n"
+            "- Status: implementation\n",
+            encoding="utf-8",
+        )
+        (work / "CHANGE.md").write_text(
+            "# Change\n\n"
+            "- Status: ready-for-implementation\n"
+            "- Class: 1\n"
+            "- DESIGN_DELTA.md required: no\n"
+            "- Impact analysis accepted: yes\n"
+            "- Ready for implementation: yes\n",
+            encoding="utf-8",
+        )
+        (work / "IMPACT.md").write_text(
+            "# Impact\n\n"
+            "- Status: accepted\n"
+            "- Impact analysis complete: yes\n"
+            "- No relevant references remain unclassified: yes\n\n"
+            "## Impact matrix\n\n"
+            "| Layer or concern | Located artifact / current owner | Action | Required end state | Owning task | Verification evidence |\n"
+            "|---|---|---|---|---|---|\n"
+            "| UI | CustomerForm | modify | updated | T001 | test |\n",
+            encoding="utf-8",
+        )
+        (work / "PLAN.md").write_text(
+            "# Plan\n\n"
+            f"- Cadence: {cadence}\n"
+            "- Forced per-task review triggers present: none\n",
+            encoding="utf-8",
+        )
+        (work / "tasks/T001.md").write_text(
+            "# Task\n\n- Review batch: RB001\n", encoding="utf-8"
+        )
+
+    def test_incremental_discovery_allows_draft_change_without_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_repo(root)
+            work = root / ".ai/work/CHG-001"
+            (root / ".ai/CURRENT_PLAN.md").write_text(
+                "# Current work\n\n"
+                "- Work type: incremental-change\n"
+                "- Work directory: `.ai/work/CHG-001/`\n"
+                "- Change request: `.ai/work/CHG-001/CHANGE.md`\n"
+                "- Status: discovery\n",
+                encoding="utf-8",
+            )
+            (work / "CHANGE.md").write_text(
+                "# Change\n\n- Status: draft\n", encoding="utf-8"
+            )
+            result = self.run_check(root)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_valid_incremental_change_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_repo(root)
+            self.write_valid_change(root)
+            result = self.run_check(root)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            self.assertIn("structurally valid", result.stdout)
+
+    def test_unclassified_impact_row_fails_implementation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_repo(root)
+            self.write_valid_change(root)
+            impact = root / ".ai/work/CHG-001/IMPACT.md"
+            impact.write_text(
+                impact.read_text(encoding="utf-8").replace(
+                    "| UI | CustomerForm | modify |",
+                    "| UI | CustomerForm |  |",
+                ),
+                encoding="utf-8",
+            )
+            result = self.run_check(root)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("invalid or empty action", result.stdout)
+
+    def test_design_class_two_requires_design_delta(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_repo(root)
+            self.write_valid_change(root)
+            change = root / ".ai/work/CHG-001/CHANGE.md"
+            change.write_text(
+                change.read_text(encoding="utf-8")
+                .replace("- Class: 1", "- Class: 2")
+                .replace(
+                    "- DESIGN_DELTA.md required: no",
+                    "- DESIGN_DELTA.md required: yes",
+                ),
+                encoding="utf-8",
+            )
+            result = self.run_check(root)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("DESIGN_DELTA.md", result.stdout)
+
+    def test_batch_size_is_enforced(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_repo(root)
+            self.write_valid_change(root)
+            tasks = root / ".ai/work/CHG-001/tasks"
+            for name in ("T002.md", "T003.md"):
+                (tasks / name).write_text(
+                    "# Task\n\n- Review batch: RB001\n", encoding="utf-8"
+                )
+            result = self.run_check(root)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("configured maximum is 2", result.stdout)
+
+    def test_forced_trigger_requires_per_task_cadence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.make_repo(root)
+            self.write_valid_change(root)
+            plan = root / ".ai/work/CHG-001/PLAN.md"
+            plan.write_text(
+                plan.read_text(encoding="utf-8").replace(
+                    "Forced per-task review triggers present: none",
+                    "Forced per-task review triggers present: migration",
+                ),
+                encoding="utf-8",
+            )
+            result = self.run_check(root)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("forced per-task triggers", result.stdout)
 
 
 class ConfiguredProjectVerificationTests(unittest.TestCase):

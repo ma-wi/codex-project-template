@@ -6,9 +6,11 @@ Record release-relevant user-visible changes. Do not use this file as an impleme
 
 ### Added
 
+- Added capability-based current-state specifications and an incremental-change workflow with change requests, full-stack impact matrices, design classification, vertical slices, review batches, superseded-artifact tracking, and structural verification.
 - Added fail-closed committed gate defaults, locked CI setup, recursive dependency-policy coverage, template self-tests, and Linux/Windows copy-safety tests.
 - Added durable specifications, explicit change classes, conditional review lenses, and a one-requirement-per-worktree model.
 - Added configured-project readiness checks and executable zero-test/missing-tool regressions for generated stack gates.
+- Added an update mode to the copy scripts (`create-project.sh --update` / `create-project.ps1 -Update`) that integrates new and changed template files into an existing template-based project, emits a reviewable patch by default, applies safe changes with `--apply`, and never overwrites project-owned files listed under `[update_protected]`.
 
 ### Changed
 

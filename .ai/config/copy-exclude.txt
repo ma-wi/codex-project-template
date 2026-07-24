@@ -44,3 +44,16 @@ target
 .pyc
 .pyo
 .zip
+
+# Files seeded once by create mode but owned by the concrete project afterwards.
+# Update mode (create-project.* --update) never overwrites these; it only reports
+# template-vs-project differences for manual merge.
+[update_protected]
+.ai/project.yaml
+.ai/PROJECT_CONTEXT.md
+.ai/NEXT_STEPS.md
+.ai/policies/QUALITY_GATES.md
+.ai/config/project.defaults.env
+.ai/config/dependency-allowlist.txt
+.ai/config/dependency-denylist.txt
+.ai/config/dependency-policy.conf

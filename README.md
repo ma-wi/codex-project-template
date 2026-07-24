@@ -9,9 +9,10 @@ Python ist standardmäßig aktiviert. React/TypeScript, Bash und .NET/Visual Bas
 Der typische Ablauf ist:
 
 ```text
-akzeptierte Anforderung -> Planner -> Implementer -> unabhängiger Reviewer
-                                      ^ Fehlerbehebung v
-                                  Doku-Pflege und Closeout
+neue Capability       -> Planner        -> Implementer -> unabhängiger Reviewer
+bestehende Capability -> Change Planner -> Implementer -> unabhängiger Reviewer
+                                                ^ Fehlerbehebung v
+                                            Doku-Pflege und Closeout
 ```
 
 Die wichtigsten Dateien sind:
@@ -20,10 +21,10 @@ Die wichtigsten Dateien sind:
 - `.ai/project.yaml`: technische Projektkonfiguration, zum Beispiel aktivierte Stacks.
 - `.ai/tools/`: Bootstrap-, CI-, Lint-, Test-, Security- und Verify-Skripte.
 - `.ai/policies/`: dauerhafte Regeln für Workflow, Security, Dependencies, Doku und Quality Gates.
-- `.ai/roles/`: Rollenbeschreibungen für Planner, Implementer und Reviewer.
-- `.ai/templates/`: Vorlagen für Requirements, Specs, ADRs, Work Items und Reviews.
+- `.ai/roles/`: Rollenbeschreibungen für Planner, Change Planner, Implementer und Reviewer.
+- `.ai/templates/`: Vorlagen für Requirements, Capability Specs, Current Work, Changes, Impact-Matrizen, ADRs, Work Items und Reviews.
 - `docs/requirements/`: akzeptierte Anforderungen.
-- `docs/specifications/`: dauerhafte Spezifikationen und Akzeptanzkriterien.
+- `docs/specifications/`: capability-basierte aktuelle Spezifikationen und Akzeptanzkriterien, z. B. `customer-management.md`.
 - `docs/architecture/decisions/`: Architekturentscheidungen, also ADRs.
 - `.ai/work/`: temporäre aktive Arbeitspläne pro Requirement.
 
@@ -82,6 +83,52 @@ Die Kopie enthält die wiederverwendbaren Projektregeln, Security-Regeln, Konfig
 
 `bootstrap` erzeugt später ein neues Projekt-README. Die Security-Regeln liegen in `.ai/policies/SECURITY_GUIDELINES.md`; ein separates Root-`SECURITY.md` wird nicht mehr mitgeführt.
 
+## Bestehendes Projekt auf eine neue Template-Version aktualisieren
+
+Wenn das Template weiterentwickelt wurde, integriert der Update-Modus die neuen und
+geänderten Dateien in ein Projekt, das bereits aus dem Template erstellt wurde. Das
+Skript läuft aus dem Template heraus und zeigt auf den Projektordner.
+
+Grundregeln des Update-Modus:
+
+- Neue Template-Dateien werden hinzugefügt.
+- Geänderte wiederverwendbare Control-Plane-Dateien werden aktualisiert.
+- Projekteigene Dateien aus der Manifest-Sektion `[update_protected]` (z. B.
+  `.ai/project.yaml`, `.ai/PROJECT_CONTEXT.md`, `.ai/policies/QUALITY_GATES.md`,
+  `.ai/config/project.defaults.env` und die Dependency-Listen) werden **nie**
+  überschrieben. Unterschiede werden nur als Patch zum manuellen Zusammenführen gemeldet.
+- Es wird nichts im Zielprojekt gelöscht.
+
+### Linux, macOS, Git Bash oder WSL
+
+```bash
+# Vorschau, ohne etwas zu schreiben:
+./.ai/tools/create-project.sh --update --dry-run /path/to/existing-project
+
+# Standard: erzeugt einen Patch zur Durchsicht, verändert das Ziel nicht:
+./.ai/tools/create-project.sh --update /path/to/existing-project
+git -C /path/to/existing-project apply template-update.patch
+
+# Oder die sicheren Änderungen direkt integrieren:
+./.ai/tools/create-project.sh --update --apply /path/to/existing-project
+```
+
+Standardmäßig schreibt der Update-Modus `template-update.patch` (neue und geänderte
+Template-Dateien) und, falls projekteigene Dateien im Template abweichen,
+`template-update.manual.patch` zum manuellen Zusammenführen. Mit `--patch-file` lässt
+sich der Pfad ändern. `--apply` schreibt die sicheren Änderungen direkt.
+
+### Windows PowerShell
+
+```powershell
+.\.ai\tools\create-project.ps1 -TargetDirectory "C:\Projects\existing-project" -Update -WhatIf
+.\.ai\tools\create-project.ps1 -TargetDirectory "C:\Projects\existing-project" -Update
+.\.ai\tools\create-project.ps1 -TargetDirectory "C:\Projects\existing-project" -Update -Apply
+```
+
+Nach einem Update: `.ai/project.yaml` prüfen, bei Bedarf `bootstrap` erneut ausführen
+und `./.ai/tools/verify.sh` laufen lassen.
+
 ## Konfiguration und Bootstrap
 
 Bearbeite zuerst `.ai/project.yaml`:
@@ -92,6 +139,7 @@ Bearbeite zuerst `.ai/project.yaml`:
 - bei React Package Manager und Verzeichnis festlegen;
 - bei .NET Solution und explizites Testprojekt eintragen;
 - `engineering_knowledge` nur aktivieren, wenn der MCP wirklich eingerichtet ist.
+- unter `incremental_changes` Review-Kadenz, maximale Batch-Größe und Risikokategorien festlegen.
 
 Aktivierte Stacks erzeugen verpflichtende Gates. Wenn ein Projekt zuerst nur Backend-Code enthält, lasse React und Bash deaktiviert und aktiviere sie später mit einem erneuten Bootstrap.
 
@@ -181,7 +229,7 @@ Empfohlene Repository-Einstellungen:
 Für normale oder größere Änderungen gilt:
 
 1. Requirement akzeptieren.
-2. Planner erstellt Spezifikation und Plan.
+2. Planner erstellt bei neuen Capabilities eine capability-basierte Spezifikation und einen Plan; bei Änderungen bestehender Capabilities erstellt der Change Planner zusätzlich `CHANGE.md` und `IMPACT.md`.
 3. Implementer setzt nur `ready` Tasks um und prüft nach jeder relevanten Änderung `README.md` sowie `.ai/PROJECT_CONTEXT.md`.
 4. `./.ai/tools/verify.sh` muss grün sein.
 5. Frischer Reviewer prüft unabhängig.
@@ -189,29 +237,147 @@ Für normale oder größere Änderungen gilt:
 
 Für kleine, rein mechanische Änderungen kann der Prozess reduziert werden. Die Regeln dazu stehen in `AGENTS.md` und `.ai/policies/WORKFLOW.md`.
 
+
+## Capability-basierte Spezifikationen
+
+Spezifikationen werden nach dauerhaften fachlichen oder technischen Capabilities
+benannt, nicht nach einzelnen Änderungs-IDs:
+
+```text
+docs/specifications/customer-management.md
+docs/specifications/authentication.md
+docs/specifications/reporting.md
+```
+
+Eine Capability-Spezifikation beschreibt den aktuell akzeptierten Zustand. Eine
+inkrementelle Änderung aktualisiert die betroffene Datei in-place. Die Änderungshistorie
+bleibt in Git und Pull Requests; Agenten müssen keine Kette aus alten Change-Specs
+rekonstruieren.
+
+Eine Änderung kann mehrere Capability-Spezifikationen betreffen. Wenn keine
+beobachtbare Capability betroffen ist, muss `not-required` mit Begründung dokumentiert
+werden.
+
+## Inkrementelle Änderungen
+
+Änderungen an bestehender Funktionalität folgen zusätzlich
+`.ai/policies/INCREMENTAL_CHANGE_WORKFLOW.md`.
+
+Temporäre Struktur:
+
+```text
+.ai/work/CHG-042-remove-middle-name/
+├── CHANGE.md
+├── IMPACT.md
+├── DESIGN_DELTA.md       # nur Designklasse 2 oder 3
+├── PLAN.md
+└── tasks/
+```
+
+Der Change Planner verwendet:
+
+- `.ai/templates/CHANGE_REQUEST.md` für aktuellen und gewünschten Zustand,
+  Invarianten, Migration, Compatibility und Designklassifizierung;
+- `.ai/templates/CHANGE_IMPACT.md` für die Full-Stack-Auswirkungsmatrix,
+  bestehende Verantwortung und Superseded-Artefakte;
+- `.ai/templates/DESIGN_DELTA.md` für neue UI-Kompositionen oder
+  Designsystemänderungen.
+
+Zulässige Aktionen in der Impact-Matrix:
+
+```text
+keep
+modify
+migrate
+deprecate
+remove
+replace
+not-applicable
+```
+
+Vor einer neuen Komponente, einem Endpoint, Service, Schema, einer Tabelle oder einem
+Utility muss die bestehende Verantwortung gesucht werden. Parallele Implementierungen
+sind nur bei akzeptierter Compatibility-Anforderung mit Migration und Entfernungskriterium
+erlaubt.
+
+Tasks sollen vertikale, end-to-end konsistente Slices sein. Ein Task wie „Feld
+entfernen“ umfasst bei Relevanz UI, Frontend-Typen, API-Vertrag, Backend, Persistenz,
+Tests und Dokumentation statt getrennte Layer-Tasks zu erzeugen.
+
+### Designklassifizierung
+
+- `0`: keine sichtbare UI-/Interaktionsänderung;
+- `1`: bestehendes Komponenten- und Layoutmuster, visuelle Evidenz nach Umsetzung;
+- `2`: neue Komposition oder neuer Flow, `DESIGN_DELTA.md` und Designfreigabe;
+- `3`: Designsystem- oder Interaktionsstandard ändert sich, Designfreigabe und
+  dauerhafte Designdokumentation erforderlich.
+
+### Review-Kadenz
+
+Der Plan wählt:
+
+- `per-task` für riskante, getrennt prüfbare Änderungen;
+- `batch` für kleine kohärente Gruppen;
+- `feature` für eine insgesamt kleine Änderung.
+
+Die Defaults stehen in `.ai/project.yaml`:
+
+```yaml
+incremental_changes:
+  default_review_cadence: "batch"
+  max_tasks_per_review_batch: 3
+  force_task_review_for: "migration public-api authentication authorization security dependency-change"
+```
+
+`force_task_review_for` ist eine leerzeichengetrennte Liste von Risikokategorien. Sobald
+eine davon zutrifft, muss der Plan `per-task` verwenden. `check-change-impact.py`
+validiert aktive inkrementelle Änderungen und läuft automatisch in `verify.sh`.
+
+Ein aktiver `.ai/CURRENT_PLAN.md` enthält mindestens:
+
+```markdown
+# Current work
+
+- Work type: incremental-change
+- Requirement: `docs/requirements/CHG-042.md`
+- Work directory: `.ai/work/CHG-042-remove-middle-name/`
+- Change request: `.ai/work/CHG-042-remove-middle-name/CHANGE.md`
+- Change impact: `.ai/work/CHG-042-remove-middle-name/IMPACT.md`
+- Specifications: `docs/specifications/customer-management.md`
+- Plan: `.ai/work/CHG-042-remove-middle-name/PLAN.md`
+- Status: planning
+```
+
+Vor Implementation müssen `CHANGE.md` und `IMPACT.md` akzeptiert und vollständig sein.
+Vor Closeout werden Capability-Spezifikationen und gepflegte Dokumentation auf den
+neuen aktuellen Zustand gebracht; danach werden die temporären Change-Artefakte
+entfernt.
+
 ## Agent-Rollen
 
 Nutze für die Standardrollen frische Agent-Kontexte:
 
-- Planner: `.ai/roles/PLANNER.md`
+- Planner für neue Capabilities: `.ai/roles/PLANNER.md`
+- Change Planner für inkrementelle Änderungen: `.ai/roles/CHANGE_PLANNER.md`
 - Implementer: `.ai/roles/IMPLEMENTER.md`
 - Independent reviewer: `.ai/roles/CODE_REVIEWER.md`
 
-Nur diese drei Rollen sind Standard. Security-, Dependency-, Test- und Doku-Hinweise werden über `.ai/policies/REVIEW_LENSES.md` je nach Risiko geladen.
+Diese vier Rollen bilden den Standardprozess. Security-, Dependency-, Test- und Doku-Hinweise werden über `.ai/policies/REVIEW_LENSES.md` je nach Risiko geladen.
 
 ## Dauerhafte und temporäre Informationen
 
 Dauerhaft:
 
 - `docs/requirements/`: akzeptierte Anforderungen;
-- `docs/specifications/`: beobachtbares Verhalten, Akzeptanzkriterien und Test-Seams;
+- `docs/specifications/`: capability-basierte aktuelle Wahrheit, beobachtbares Verhalten, Akzeptanzkriterien und Test-Seams;
 - `docs/architecture/decisions/`: akzeptierte Architekturentscheidungen;
 - gepflegte Projekt-, Betriebs-, Security- und Architektur-Dokumentation;
 - Code und Tests.
 
 Temporär:
 
-- `.ai/work/<requirement-id>/PLAN.md`;
+- `.ai/work/<requirement-or-change-id>/CHANGE.md` und `IMPACT.md` bei inkrementellen Änderungen;
+- `.ai/work/<requirement-or-change-id>/PLAN.md`;
 - Task-Dateien;
 - lokale Review- und Closeout-Notizen.
 
